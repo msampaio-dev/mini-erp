@@ -5,7 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { CreateUserInput, User } from '@mini-erp/contracts';
-import { Prisma } from '../../../generated/prisma/client.js';
+import type { Prisma } from '../../../generated/prisma/client.js';
+import { uniqueViolationTarget } from '../../../common/prisma-errors.js';
 import { PrismaService } from '../../../infra/prisma/prisma.service.js';
 import { hashPassword } from '../password/password.js';
 import { SessionService } from '../session/session.service.js';
@@ -58,7 +59,7 @@ export class UsersService {
     } catch (err) {
       // Confia na constraint UNIQUE do banco em vez de "consultar antes e inserir depois":
       // a consulta prévia teria condição de corrida entre duas requisições simultâneas.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      if (uniqueViolationTarget(err) !== null) {
         throw new ConflictException('Já existe um usuário com este e-mail');
       }
       throw err;

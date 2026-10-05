@@ -96,3 +96,59 @@ model Session {
   @@index([expiresAt])
   @@map("sessions")
 }
+
+// ─── Catálogo ──────────────────────────────────────────────────────────────
+
+enum Unit {
+  UN
+  CX
+  PC
+  KG
+  L
+  M
+}
+
+enum ProductStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model Category {
+  id   String @id @default(uuid(7)) @db.Uuid
+  /// citext: único sem diferenciar maiúsculas ("Bebidas" = "bebidas").
+  name String @unique @db.Citext
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  /// Código de negócio (ADR 0009). Único, editável; as relações usam o id.
+  sku            String        @unique
+  name           String
+  description    String        @default("")
+  unit           Unit
+  /// GTIN/EAN opcional. UNIQUE permite vários NULL no Postgres.
+  barcode        String?       @unique
+  categoryId     String?       @map("category_id") @db.Uuid
+  salePriceCents Int           @map("sale_price_cents")
+  /// Até 3 casas decimais (unidades fracionáveis: KG, L, M).
+  minStock       Decimal       @default(0) @map("min_stock") @db.Decimal(14, 3)
+  /// Arquivar em vez de apagar (ADR 0009): o histórico continua íntegro.
+  status         ProductStatus @default(ACTIVE)
+  /// Optimistic locking: incrementa a cada alteração.
+  version        Int           @default(1)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([categoryId])
+  @@index([status])
+  // Índices trigram: busca parcial ("caneta az") sem varrer a tabela inteira.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_sku_trgm_idx")
+  @@map("products")
+}

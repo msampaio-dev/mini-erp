@@ -13,7 +13,7 @@
     "dev:api": "npm run build:contracts && npm run start:dev -w @mini-erp/api",
     "dev:web": "npm run build:contracts && npm run dev -w @mini-erp/web",
     "build": "npm run build:contracts && npm run build -w @mini-erp/api && npm run build -w @mini-erp/web",
-    "test": "npm run build:contracts && npm run test -w @mini-erp/api",
+    "test": "npm run test -w @mini-erp/contracts && npm run build:contracts && npm run test -w @mini-erp/api",
     "lint": "npm run lint --workspaces --if-present"
   },
   "engines": {

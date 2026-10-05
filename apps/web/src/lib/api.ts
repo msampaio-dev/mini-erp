@@ -3,12 +3,15 @@ import type { z } from 'zod'
 /** Erro HTTP da API, com a mensagem e os erros por campo que o Nest devolve. */
 export class ApiError extends Error {
   readonly status: number
+  /** Código de erro de negócio, quando a API envia um (ex.: VERSION_CONFLICT). */
+  readonly code: string | undefined
   readonly fieldErrors: { path: string; message: string }[]
 
   constructor(status: number, body: unknown) {
-    const b = (body ?? {}) as { message?: unknown; errors?: unknown }
+    const b = (body ?? {}) as { message?: unknown; errors?: unknown; code?: unknown }
     super(typeof b.message === 'string' ? b.message : `Erro ${status}`)
     this.status = status
+    this.code = typeof b.code === 'string' ? b.code : undefined
     this.fieldErrors = Array.isArray(b.errors) ? b.errors : []
   }
 }
@@ -35,14 +38,29 @@ export async function apiGet<T extends z.ZodType>(path: string, schema: T): Prom
   return schema.parse(await call('GET', path))
 }
 
-export async function apiPost<T extends z.ZodType>(
+export async function apiSend<T extends z.ZodType>(
+  method: 'POST' | 'PUT',
   path: string,
   body: unknown,
   schema: T,
 ): Promise<z.output<T>> {
-  return schema.parse(await call('POST', path, body))
+  return schema.parse(await call(method, path, body))
+}
+
+export async function apiPost<T extends z.ZodType>(path: string, body: unknown, schema: T) {
+  return apiSend('POST', path, body, schema)
 }
 
 export async function apiPostNoContent(path: string, body?: unknown): Promise<void> {
   await call('POST', path, body)
+}
+
+/** Monta a query string ignorando valores vazios. */
+export function toQueryString(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') search.set(key, String(value))
+  }
+  const s = search.toString()
+  return s ? `?${s}` : ''
 }

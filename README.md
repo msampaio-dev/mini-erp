@@ -31,7 +31,7 @@ npm run db:up      # Postgres na porta 5433
 npm run db:deploy -w @mini-erp/api   # aplica as migrations
 npm run db:seed -w @mini-erp/api     # papéis, permissões e o primeiro admin
 npm run dev:api    # API em http://localhost:3000/api
-npm run dev:web    # Front em http://localhost:5173
+npm run dev:web    # Front em http://localhost:5180
 ```
 
 Health check: `GET /api/health`.
@@ -41,7 +41,7 @@ Health check: `GET /api/health`.
 | Comando | O que faz |
 |---|---|
 | `npm run build` | compila contracts, API e front |
-| `npm test` | testes unitários da API |
+| `npm test` | testes dos contratos e unitários da API |
 | `npm run test:e2e -w @mini-erp/api` | testes ponta a ponta num banco separado `mini_erp_test` (criado automaticamente) |
 | `npm run db:migrate -w @mini-erp/api` | cria e aplica uma migration em dev |
 | `npm run db:seed -w @mini-erp/api` | sincroniza papéis/permissões e cria o admin (idempotente) |
@@ -52,7 +52,7 @@ Health check: `GET /api/health`.
 
 - [x] Fase 1: fundação (monorepo, banco, Prisma, health check)
 - [x] Fase 2: acesso (login com sessão, Argon2id, RBAC com negação por padrão)
-- [ ] Fase 3: catálogo de produtos
+- [x] Fase 3: catálogo (produtos, categorias, optimistic locking, busca trigram)
 - [ ] Fase 4: estoque (ledger, saldo, concorrência)
 - [ ] Fase 5: vendas
 - [ ] Fase 6: relatórios

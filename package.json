@@ -1,0 +1,26 @@
+{
+  "name": "mini-erp",
+  "private": true,
+  "description": "Mini-ERP de estoque e vendas",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "build:contracts": "npm run build -w @mini-erp/contracts",
+    "dev:api": "npm run build:contracts && npm run start:dev -w @mini-erp/api",
+    "dev:web": "npm run build:contracts && npm run dev -w @mini-erp/web",
+    "build": "npm run build:contracts && npm run build -w @mini-erp/api && npm run build -w @mini-erp/web",
+    "test": "npm run build:contracts && npm run test -w @mini-erp/api",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "allowScripts": {
+    "prisma@7.10.0": true,
+    "@prisma/engines@7.10.0": true
+  }
+}

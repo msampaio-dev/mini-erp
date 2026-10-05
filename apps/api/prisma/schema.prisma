@@ -1,0 +1,13 @@
+// Schema do banco do mini-ERP.
+// Os modelos de domínio entram fase a fase (Acesso, Catálogo, Estoque, Vendas).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createProductSchema, quantitySchema } from './catalog.js';
 import { isValidGtin } from './gtin.js';
 import { centsToInput, parseBrlToCents } from './money.js';
+import { balancesQuerySchema, createAdjustmentSchema, createEntrySchema } from './inventory.js';
 
 describe('parseBrlToCents', () => {
   it.each([
@@ -60,5 +61,27 @@ describe('createProductSchema', () => {
 
   it('permite fracionado para KG', () => {
     expect(createProductSchema.safeParse({ ...base, unit: 'KG', minStock: 2.5 }).success).toBe(true);
+  });
+});
+
+describe('contratos de estoque', () => {
+  const productId = '0199a6a0-0000-7000-8000-000000000000';
+
+  it('entrada exige quantidade positiva', () => {
+    expect(createEntrySchema.safeParse({ productId, quantity: -1, unitCostCents: 100 }).success).toBe(false);
+    expect(createEntrySchema.safeParse({ productId, quantity: 0, unitCostCents: 100 }).success).toBe(false);
+    expect(createEntrySchema.safeParse({ productId, quantity: 2.5, unitCostCents: 100 }).success).toBe(true);
+  });
+
+  it('ajuste aceita sinal, mas motivo OUTRO exige descrição', () => {
+    expect(createAdjustmentSchema.safeParse({ productId, quantity: -3, reason: 'AVARIA' }).success).toBe(true);
+    const semNota = createAdjustmentSchema.safeParse({ productId, quantity: 1, reason: 'OUTRO' });
+    expect(semNota.success).toBe(false);
+    expect(semNota.error?.issues[0]?.path).toEqual(['note']);
+  });
+
+  it('lista de ids de produto vem separada por vírgula', () => {
+    expect(balancesQuerySchema.parse({ productIds: `${productId},${productId}` }).productIds).toHaveLength(2);
+    expect(balancesQuerySchema.safeParse({ productIds: 'x' }).success).toBe(false);
   });
 });

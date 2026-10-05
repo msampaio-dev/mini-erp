@@ -53,7 +53,7 @@ Health check: `GET /api/health`.
 - [x] Fase 1: fundação (monorepo, banco, Prisma, health check)
 - [x] Fase 2: acesso (login com sessão, Argon2id, RBAC com negação por padrão)
 - [x] Fase 3: catálogo (produtos, categorias, optimistic locking, busca trigram)
-- [ ] Fase 4: estoque (ledger, saldo, concorrência)
+- [x] Fase 4: estoque (ledger imutável, saldo atômico, custo médio, estornos, idempotência)
 - [ ] Fase 5: vendas
 - [ ] Fase 6: relatórios
 - [ ] Fase 7: qualidade e deploy

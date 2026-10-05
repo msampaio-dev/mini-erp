@@ -6,3 +6,4 @@ export * from './users.js';
 export * from './gtin.js';
 export * from './pagination.js';
 export * from './catalog.js';
+export * from './inventory.js';

@@ -172,9 +172,16 @@ function ProductForm({ product, onReload }: { product?: Product; onReload?: () =
       <div className="row">
         <h1>{isNew ? 'Novo produto' : product.name}</h1>
         {product && (
-          <span className={`badge ${product.status === 'ACTIVE' ? 'badge-ok' : 'badge-off'}`}>
-            {product.status === 'ACTIVE' ? 'Ativo' : 'Arquivado'}
-          </span>
+          <div className="actions">
+            <span className={`badge ${product.status === 'ACTIVE' ? 'badge-ok' : 'badge-off'}`}>
+              {product.status === 'ACTIVE' ? 'Ativo' : 'Arquivado'}
+            </span>
+            {can('estoque:ler') && (
+              <Link to={`/estoque/${product.id}`} className="button secondary small">
+                Ver estoque
+              </Link>
+            )}
+          </div>
         )}
       </div>
 

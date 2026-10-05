@@ -26,8 +26,9 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  roles    UserRole[]
-  sessions Session[]
+  roles          UserRole[]
+  sessions       Session[]
+  stockMovements StockMovement[]
 
   @@map("users")
 }
@@ -143,7 +144,9 @@ model Product {
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
 
-  category Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category  Category?       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  movements StockMovement[]
+  balance   StockBalance?
 
   @@index([categoryId])
   @@index([status])
@@ -151,4 +154,57 @@ model Product {
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
   @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_sku_trgm_idx")
   @@map("products")
+}
+
+// ─── Estoque (ADR 0002 / ADR 0010) ─────────────────────────────────────────
+
+enum MovementType {
+  ENTRY
+  ADJUSTMENT
+  REVERSAL
+  SALE
+}
+
+/// Livro-razão: append-only. Um trigger no banco bloqueia UPDATE e DELETE.
+model StockMovement {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  productId      String       @map("product_id") @db.Uuid
+  type           MovementType
+  /// Com sinal: positivo entra, negativo sai.
+  quantity       Decimal      @db.Decimal(14, 3)
+  /// Custo unitário da compra (só em ENTRY).
+  unitCostCents  Int?         @map("unit_cost_cents")
+  /// Motivo padronizado do ajuste (AVARIA, PERDA, INVENTARIO, OUTRO).
+  reason         String?
+  note           String       @default("")
+  /// Saldo logo após esta movimentação: a coluna "saldo" do kardex.
+  balanceAfter   Decimal      @map("balance_after") @db.Decimal(14, 3)
+  /// Estorno aponta para a original. UNIQUE: cada movimentação é estornada no máximo uma vez.
+  reversalOfId   String?      @unique @map("reversal_of_id") @db.Uuid
+  createdById    String       @map("created_by_id") @db.Uuid
+  /// Chave de idempotência enviada pelo cliente (único por usuário).
+  idempotencyKey String?      @map("idempotency_key") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  product    Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdBy  User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  reversalOf StockMovement? @relation("Reversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy StockMovement? @relation("Reversal")
+
+  @@unique([createdById, idempotencyKey], map: "stock_movements_idempotency_key")
+  @@index([productId, createdAt(sort: Desc)])
+  @@map("stock_movements")
+}
+
+/// Saldo atual por produto: cache consistente do ledger, atualizado na mesma transação.
+model StockBalance {
+  productId    String   @id @map("product_id") @db.Uuid
+  quantity     Decimal  @default(0) @db.Decimal(14, 3)
+  /// Custo médio ponderado por unidade, em centavos (4 casas: frações de centavo).
+  avgCostCents Decimal  @default(0) @map("avg_cost_cents") @db.Decimal(18, 4)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("stock_balances")
 }

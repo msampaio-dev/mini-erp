@@ -7,6 +7,7 @@ import { NotFoundPage } from './pages/NotFoundPage.tsx'
 import { ProfilePage } from './pages/ProfilePage.tsx'
 import { ProductFormPage } from './pages/products/ProductFormPage.tsx'
 import { ProductListPage } from './pages/products/ProductListPage.tsx'
+import { StockPage } from './pages/stock/StockPage.tsx'
 
 export default function App() {
   const { me } = useAuth()
@@ -39,6 +40,14 @@ export default function App() {
           element={
             <RequirePermission permission="produtos:ler">
               <ProductFormPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="estoque/:productId"
+          element={
+            <RequirePermission permission="estoque:ler">
+              <StockPage />
             </RequirePermission>
           }
         />

@@ -386,3 +386,94 @@ tbody tr:last-child td {
 .off {
   color: var(--muted);
 }
+
+/* ─── Estoque ───────────────────────────────────────────────────────── */
+
+.breadcrumb {
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+}
+
+.small-text {
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.stat {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.stat .muted {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.stat strong {
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-alert {
+  border-color: var(--fail);
+}
+
+.stat-alert strong {
+  color: var(--fail);
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.panel h2 {
+  margin-top: 0;
+}
+
+.movement-form {
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+@media (max-width: 600px) {
+  .movement-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.down {
+  color: var(--fail);
+}
+
+td.note {
+  white-space: normal;
+  max-width: 260px;
+}
+
+tr.reversed td {
+  opacity: 0.6;
+}
+
+tr.reversed td:first-child,
+tr.reversed .num {
+  text-decoration: line-through;
+}
+
+td .badge {
+  margin-left: 6px;
+}

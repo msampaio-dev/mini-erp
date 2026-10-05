@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router'
 import { formatCents, PRODUCT_STATUSES, type ProductStatus } from '@mini-erp/contracts'
 import { useAuth } from '../../auth/auth-context.ts'
 import { useProducts, type ProductListParams } from '../../lib/catalog-queries.ts'
+import { useBalances } from '../../lib/inventory-queries.ts'
+import { formatQuantity } from '../../lib/quantity.ts'
 import { useDebouncedValue } from '../../lib/use-debounced-value.ts'
 
 const PAGE_SIZE = 20
@@ -54,6 +56,12 @@ export function ProductListPage() {
   const { data, isPending, isError, error, isPlaceholderData } = useProducts(params)
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
 
+  // Saldo vem de outro módulo (Estoque): uma requisição para a página inteira, não uma por linha.
+  const showStock = can('estoque:ler')
+  const { data: balances } = useBalances(data?.items.map((p) => p.id) ?? [], showStock)
+  const balanceOf = new Map(balances?.map((b) => [b.productId, b.quantity]))
+  const columns = showStock ? 7 : 6
+
   return (
     <section>
       <div className="row">
@@ -100,6 +108,7 @@ export function ProductListPage() {
                   <th>Categoria</th>
                   <th>Un.</th>
                   <th className="num">Preço</th>
+                  {showStock && <th className="num">Saldo</th>}
                   <th>Situação</th>
                 </tr>
               </thead>
@@ -113,6 +122,9 @@ export function ProductListPage() {
                     <td>{p.category?.name ?? '—'}</td>
                     <td>{p.unit}</td>
                     <td className="num">{formatCents(p.salePriceCents)}</td>
+                    {showStock && (
+                      <StockCell quantity={balanceOf.get(p.id)} minStock={p.minStock} productId={p.id} />
+                    )}
                     <td>
                       <span className={`badge ${p.status === 'ACTIVE' ? 'badge-ok' : 'badge-off'}`}>
                         {p.status === 'ACTIVE' ? 'Ativo' : 'Arquivado'}
@@ -122,7 +134,7 @@ export function ProductListPage() {
                 ))}
                 {data.items.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="muted center">
+                    <td colSpan={columns} className="muted center">
                       Nenhum produto encontrado.
                     </td>
                   </tr>
@@ -155,5 +167,16 @@ export function ProductListPage() {
         </>
       )}
     </section>
+  )
+}
+
+function StockCell({ quantity, minStock, productId }: { quantity?: number; minStock: number; productId: string }) {
+  if (quantity === undefined) return <td className="num muted">…</td>
+  const below = minStock > 0 && quantity < minStock
+  return (
+    <td className={`num${below ? ' down' : ''}`} title={below ? 'Abaixo do estoque mínimo' : undefined}>
+      <Link to={`/estoque/${productId}`}>{formatQuantity(quantity)}</Link>
+      {below && ' ⚠'}
+    </td>
   )
 }

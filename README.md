@@ -26,8 +26,10 @@ O porquê de cada decisão está em [`docs/adr`](docs/adr).
 
 ```bash
 npm install
-cp apps/api/.env.example apps/api/.env
+cp apps/api/.env.example apps/api/.env   # defina SEED_ADMIN_PASSWORD (mín. 10 caracteres)
 npm run db:up      # Postgres na porta 5433
+npm run db:deploy -w @mini-erp/api   # aplica as migrations
+npm run db:seed -w @mini-erp/api     # papéis, permissões e o primeiro admin
 npm run dev:api    # API em http://localhost:3000/api
 npm run dev:web    # Front em http://localhost:5173
 ```
@@ -40,15 +42,16 @@ Health check: `GET /api/health`.
 |---|---|
 | `npm run build` | compila contracts, API e front |
 | `npm test` | testes unitários da API |
-| `npm run test:e2e -w @mini-erp/api` | testes ponta a ponta (precisa do banco no ar) |
+| `npm run test:e2e -w @mini-erp/api` | testes ponta a ponta num banco separado `mini_erp_test` (criado automaticamente) |
 | `npm run db:migrate -w @mini-erp/api` | cria e aplica uma migration em dev |
+| `npm run db:seed -w @mini-erp/api` | sincroniza papéis/permissões e cria o admin (idempotente) |
 | `npm run db:studio -w @mini-erp/api` | abre o Prisma Studio |
 | `npm run db:down` | para o Postgres |
 
 ## Roadmap
 
 - [x] Fase 1: fundação (monorepo, banco, Prisma, health check)
-- [ ] Fase 2: acesso (login, RBAC)
+- [x] Fase 2: acesso (login com sessão, Argon2id, RBAC com negação por padrão)
 - [ ] Fase 3: catálogo de produtos
 - [ ] Fase 4: estoque (ledger, saldo, concorrência)
 - [ ] Fase 5: vendas

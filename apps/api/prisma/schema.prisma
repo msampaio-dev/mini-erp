@@ -1,5 +1,5 @@
 // Schema do banco do mini-ERP.
-// Os modelos de domínio entram fase a fase (Acesso, Catálogo, Estoque, Vendas).
+// Convenção: modelos em PascalCase no código, tabelas/colunas em snake_case no banco.
 
 generator client {
   provider            = "prisma-client"
@@ -10,4 +10,89 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ─── Acesso ────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  name         String
+  /// Sempre minúsculo (normalizado pelo contrato Zod antes de chegar aqui).
+  email        String   @unique
+  /// Hash Argon2id no formato PHC. A senha em texto puro nunca é persistida.
+  passwordHash String   @map("password_hash")
+  /// Desativar em vez de apagar: vendas e movimentações continuam apontando para o autor.
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  roles    UserRole[]
+  sessions Session[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String @id @default(uuid(7)) @db.Uuid
+  /// Identificador estável usado no código e no seed (ADMIN, GERENTE...).
+  key         String @unique
+  name        String
+  description String @default("")
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String @id @default(uuid(7)) @db.Uuid
+  /// "<recurso>:<ação>", espelha PERMISSIONS em @mini-erp/contracts.
+  key         String @unique
+  description String @default("")
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId String @map("user_id") @db.Uuid
+  roleId String @map("role_id") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model Session {
+  /// SHA-256 do token do cookie. Se o banco vazar, os hashes não servem para logar.
+  id        String   @id
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  /// Expiração deslizante: renovada enquanto o usuário estiver ativo.
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  ip        String?
+  userAgent String?  @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }

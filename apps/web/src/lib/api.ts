@@ -1,12 +1,48 @@
 import type { z } from 'zod'
 
+/** Erro HTTP da API, com a mensagem e os erros por campo que o Nest devolve. */
+export class ApiError extends Error {
+  readonly status: number
+  readonly fieldErrors: { path: string; message: string }[]
+
+  constructor(status: number, body: unknown) {
+    const b = (body ?? {}) as { message?: unknown; errors?: unknown }
+    super(typeof b.message === 'string' ? b.message : `Erro ${status}`)
+    this.status = status
+    this.fieldErrors = Array.isArray(b.errors) ? b.errors : []
+  }
+}
+
+async function call(method: string, path: string, body?: unknown): Promise<unknown> {
+  const res = await fetch(`/api${path}`, {
+    method,
+    // 'include' envia o cookie de sessão; como front e API estão na mesma origem
+    // (proxy do Vite em dev, proxy reverso em produção), não há CORS no caminho.
+    credentials: 'include',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  const data: unknown = res.status === 204 ? null : await res.json().catch(() => null)
+  if (!res.ok) throw new ApiError(res.status, data)
+  return data
+}
+
 /**
- * Cliente HTTP mínimo. Toda resposta é validada pelo schema do
- * @mini-erp/contracts: se a API mudar o formato, o erro aparece aqui,
- * explícito, em vez de um `undefined` misterioso lá na tela.
+ * Toda resposta é validada pelo schema do @mini-erp/contracts: se a API mudar
+ * o formato, o erro aparece aqui, explícito, em vez de um `undefined` misterioso na tela.
  */
 export async function apiGet<T extends z.ZodType>(path: string, schema: T): Promise<z.output<T>> {
-  const res = await fetch(`/api${path}`, { credentials: 'include' })
-  const body: unknown = await res.json().catch(() => null)
-  return schema.parse(body)
+  return schema.parse(await call('GET', path))
+}
+
+export async function apiPost<T extends z.ZodType>(
+  path: string,
+  body: unknown,
+  schema: T,
+): Promise<z.output<T>> {
+  return schema.parse(await call('POST', path, body))
+}
+
+export async function apiPostNoContent(path: string, body?: unknown): Promise<void> {
+  await call('POST', path, body)
 }

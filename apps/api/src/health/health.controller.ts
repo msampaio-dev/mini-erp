@@ -2,12 +2,14 @@ import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import type { HealthResponse } from '@mini-erp/contracts';
 import { PrismaService } from '../infra/prisma/prisma.service.js';
+import { Public } from '../modules/access/access-policy.js';
 
 /**
  * Health check: usado por Docker/orquestradores e monitoramento para saber
  * se a instância pode receber tráfego. Retorna 503 se o banco estiver fora.
  */
 @Controller('health')
+@Public()
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 

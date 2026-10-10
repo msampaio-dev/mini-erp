@@ -477,3 +477,104 @@ tr.reversed .num {
 td .badge {
   margin-left: 6px;
 }
+
+/* ─── Vendas / PDV ──────────────────────────────────────────────────── */
+
+.pos {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .pos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pos-side {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  position: sticky;
+  top: 16px;
+}
+
+.search-results {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.search-results button {
+  width: 100%;
+  text-align: left;
+  font-weight: 400;
+}
+
+.qty-input {
+  width: 80px;
+  text-align: right;
+  padding: 4px 8px;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.totals dt {
+  color: var(--muted);
+}
+
+.totals dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.totals .grand {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.totals-right {
+  max-width: 320px;
+  margin: 16px 0 0 auto;
+}
+
+button.finish {
+  font-size: 1.1rem;
+  padding: 12px;
+}
+
+.receipt {
+  text-align: center;
+  margin: 48px auto;
+}
+
+.receipt .actions {
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.total-line {
+  font-size: 1.4rem;
+  margin: 16px 0 4px;
+}
+
+.change {
+  font-size: 1.2rem;
+}
+
+.narrow-wide {
+  max-width: 860px;
+}

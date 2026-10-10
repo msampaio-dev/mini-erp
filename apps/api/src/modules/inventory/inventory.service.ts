@@ -186,6 +186,58 @@ export class InventoryService {
     });
   }
 
+  // ─── Interface para o módulo de Vendas (roda DENTRO da transação da venda) ─
+
+  /**
+   * Baixa de estoque por venda. Recebe a transação de quem chama: se qualquer item
+   * da venda falhar, todas as baixas são desfeitas junto com a venda (D23).
+   * Devolve o custo médio do instante da baixa (RETURNING da mesma instrução): a
+   * "fotografia" de custo do item fica exata mesmo com entradas simultâneas (D24).
+   */
+  async recordSaleOutflow(
+    tx: Prisma.TransactionClient,
+    args: { productId: string; sku: string; quantity: number; userId: string; note: string },
+  ): Promise<{ movementId: string; unitCostCents: string }> {
+    const qty = toQty(args.quantity);
+    const balance = await ledger.outflow(tx, args.productId, qty);
+    if (!balance) {
+      const available = await ledger.currentQuantity(tx, args.productId);
+      throw new ConflictException({
+        code: 'INSUFFICIENT_STOCK',
+        message: `Estoque insuficiente para ${args.sku}. Disponível: ${Number(available).toLocaleString('pt-BR')}`,
+        productId: args.productId,
+        available: Number(available),
+      });
+    }
+    const movementId = await this.insertMovement(tx, {
+      productId: args.productId,
+      type: 'SALE',
+      quantity: `-${qty}`,
+      note: args.note,
+      balanceAfter: balance.quantity,
+      createdById: args.userId,
+    });
+    return { movementId, unitCostCents: balance.avgCostCents };
+  }
+
+  /** Devolve ao estoque a saída de uma venda cancelada. O UNIQUE de reversal_of_id impede devolver duas vezes. */
+  async reverseSaleOutflow(
+    tx: Prisma.TransactionClient,
+    args: { movementId: string; productId: string; quantity: number; userId: string; note: string },
+  ): Promise<void> {
+    const qty = toQty(args.quantity);
+    const balance = await ledger.inflowAtCurrentCost(tx, args.productId, qty);
+    await this.insertMovement(tx, {
+      productId: args.productId,
+      type: 'REVERSAL',
+      quantity: qty,
+      note: args.note,
+      balanceAfter: balance.quantity,
+      reversalOfId: args.movementId,
+      createdById: args.userId,
+    });
+  }
+
   // ─── Leituras ────────────────────────────────────────────────────────────
 
   async getBalances(productIds: string[]): Promise<Balance[]> {

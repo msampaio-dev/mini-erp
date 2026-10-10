@@ -29,6 +29,8 @@ model User {
   roles          UserRole[]
   sessions       Session[]
   stockMovements StockMovement[]
+  salesCreated   Sale[]          @relation("SaleCreatedBy")
+  salesCanceled  Sale[]          @relation("SaleCanceledBy")
 
   @@map("users")
 }
@@ -147,6 +149,7 @@ model Product {
   category  Category?       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   movements StockMovement[]
   balance   StockBalance?
+  saleItems SaleItem[]
 
   @@index([categoryId])
   @@index([status])
@@ -190,6 +193,7 @@ model StockMovement {
   createdBy  User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
   reversalOf StockMovement? @relation("Reversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy StockMovement? @relation("Reversal")
+  saleItem   SaleItem?
 
   @@unique([createdById, idempotencyKey], map: "stock_movements_idempotency_key")
   @@index([productId, createdAt(sort: Desc)])
@@ -207,4 +211,77 @@ model StockBalance {
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@map("stock_balances")
+}
+
+// ─── Vendas (ADR 0011) ─────────────────────────────────────────────────────
+
+enum SaleStatus {
+  COMPLETED
+  CANCELED
+}
+
+enum PaymentMethod {
+  CASH
+  PIX
+  DEBIT
+  CREDIT
+}
+
+model Sale {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  /// Número legível (Venda nº 1042). Sequence do Postgres: pode ter "buracos", é intencional.
+  number         Int           @unique @default(autoincrement())
+  status         SaleStatus    @default(COMPLETED)
+  subtotalCents  Int           @map("subtotal_cents")
+  discountCents  Int           @map("discount_cents")
+  totalCents     Int           @map("total_cents")
+  paymentMethod  PaymentMethod @map("payment_method")
+  receivedCents  Int           @map("received_cents")
+  changeCents    Int           @map("change_cents")
+  note           String        @default("")
+  createdById    String        @map("created_by_id") @db.Uuid
+  idempotencyKey String?       @map("idempotency_key") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  canceledAt     DateTime?     @map("canceled_at") @db.Timestamptz
+  canceledById   String?       @map("canceled_by_id") @db.Uuid
+  cancelReason   String?       @map("cancel_reason")
+
+  items      SaleItem[]
+  createdBy  User       @relation("SaleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  canceledBy User?      @relation("SaleCanceledBy", fields: [canceledById], references: [id], onDelete: Restrict)
+
+  @@unique([createdById, idempotencyKey], map: "sales_idempotency_key")
+  @@index([createdAt(sort: Desc)])
+  @@index([status])
+  @@map("sales")
+}
+
+model SaleItem {
+  id              String  @id @default(uuid(7)) @db.Uuid
+  saleId          String  @map("sale_id") @db.Uuid
+  /// Ordem da linha no cupom.
+  position        Int
+  productId       String  @map("product_id") @db.Uuid
+  /// Fotografia do produto no momento da venda (D24): renomear depois não altera a venda.
+  sku             String
+  name            String
+  unit            Unit
+  quantity        Decimal @db.Decimal(14, 3)
+  unitPriceCents  Int     @map("unit_price_cents")
+  grossCents      Int     @map("gross_cents")
+  discountCents   Int     @map("discount_cents")
+  netCents        Int     @map("net_cents")
+  /// Custo médio no instante da baixa (D24): base do relatório de margem.
+  unitCostCents   Decimal @map("unit_cost_cents") @db.Decimal(18, 4)
+  /// A saída de estoque que esta linha gerou. Vendas aponta para Estoque, nunca o contrário.
+  stockMovementId String  @unique @map("stock_movement_id") @db.Uuid
+
+  sale          Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  stockMovement StockMovement @relation(fields: [stockMovementId], references: [id], onDelete: Restrict)
+
+  @@unique([saleId, productId])
+  @@unique([saleId, position])
+  @@index([productId])
+  @@map("sale_items")
 }

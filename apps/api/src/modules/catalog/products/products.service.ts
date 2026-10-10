@@ -91,6 +91,12 @@ export class ProductsService {
     return toProduct(row);
   }
 
+  /** Vários produtos numa consulta só (ex.: os itens de uma venda). Ids inexistentes são omitidos. */
+  async getMany(ids: string[]): Promise<Product[]> {
+    const rows = await this.prisma.product.findMany({ where: { id: { in: ids } }, include: productInclude });
+    return rows.map(toProduct);
+  }
+
   async create(input: CreateProductInput): Promise<Product> {
     try {
       const row = await this.prisma.product.create({ data: input, include: productInclude });

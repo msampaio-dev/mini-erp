@@ -7,10 +7,13 @@ import { NotFoundPage } from './pages/NotFoundPage.tsx'
 import { ProfilePage } from './pages/ProfilePage.tsx'
 import { ProductFormPage } from './pages/products/ProductFormPage.tsx'
 import { ProductListPage } from './pages/products/ProductListPage.tsx'
+import { PosPage } from './pages/sales/PosPage.tsx'
+import { SaleDetailPage } from './pages/sales/SaleDetailPage.tsx'
+import { SalesListPage } from './pages/sales/SalesListPage.tsx'
 import { StockPage } from './pages/stock/StockPage.tsx'
 
 export default function App() {
-  const { me } = useAuth()
+  const { me, can } = useAuth()
 
   if (me === undefined) return <p className="page muted">Carregando…</p>
   if (!me) return <LoginPage />
@@ -18,7 +21,8 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to="/produtos" replace />} />
+        {/* Cada perfil cai na tela que mais usa: quem vende vai direto ao caixa. */}
+        <Route index element={<Navigate to={can('vendas:criar') ? '/vendas/nova' : '/produtos'} replace />} />
         <Route
           path="produtos"
           element={
@@ -48,6 +52,30 @@ export default function App() {
           element={
             <RequirePermission permission="estoque:ler">
               <StockPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="vendas"
+          element={
+            <RequirePermission permission="vendas:ler">
+              <SalesListPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="vendas/nova"
+          element={
+            <RequirePermission permission="vendas:criar">
+              <PosPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="vendas/:id"
+          element={
+            <RequirePermission permission="vendas:ler">
+              <SaleDetailPage />
             </RequirePermission>
           }
         />

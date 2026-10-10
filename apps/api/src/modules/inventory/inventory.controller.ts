@@ -17,7 +17,7 @@ import {
 } from '@mini-erp/contracts';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 import { CurrentAuth, RequirePermission, type AuthContext } from '../access/access-policy.js';
-import { IdempotencyKey } from './idempotency-key.decorator.js';
+import { IdempotencyKey } from '../../common/idempotency-key.decorator.js';
 import { InventoryService, type MovementResult } from './inventory.service.js';
 
 /** 201 na primeira vez; 200 + cabeçalho Idempotent-Replayed quando é repetição. */

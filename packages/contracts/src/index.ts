@@ -7,3 +7,5 @@ export * from './gtin.js';
 export * from './pagination.js';
 export * from './catalog.js';
 export * from './inventory.js';
+export * from './sale-math.js';
+export * from './sales.js';

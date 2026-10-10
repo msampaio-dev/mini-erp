@@ -16,6 +16,7 @@ export function Layout() {
             </NavLink>
           )}
           {can('produtos:ler') && <NavLink to="/produtos">Produtos</NavLink>}
+          {can('relatorios:ler') && <NavLink to="/relatorios">Relatórios</NavLink>}
           <NavLink to="/meu-acesso">Meu acesso</NavLink>
         </nav>
         <div className="topbar-user">

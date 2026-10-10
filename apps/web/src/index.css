@@ -578,3 +578,138 @@ button.finish {
 .narrow-wide {
   max-width: 860px;
 }
+
+/* ─── Relatórios ────────────────────────────────────────────────────── */
+
+:root {
+  /* Série única do gráfico: validada (contraste >= 3:1) contra a superfície de cada modo. */
+  --series-1: #2a78d6;
+  --chart-grid: #ecebef;
+  --chart-axis: #c9c7cf;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --series-1: #3987e5;
+    --chart-grid: #2a2930;
+    --chart-axis: #4a4853;
+  }
+}
+
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-filters input[type='date'] {
+  width: auto;
+}
+
+.section-title {
+  margin-top: 32px;
+}
+
+.loading {
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.chart {
+  position: relative;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.chart svg {
+  display: block;
+}
+
+.chart-grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.chart-axis {
+  stroke: var(--chart-axis);
+  stroke-width: 1;
+}
+
+.chart-tick {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-bar {
+  fill: var(--series-1);
+  transition: opacity 0.1s;
+}
+
+.chart:has(.chart-bar.is-active) .chart-bar:not(.is-active) {
+  opacity: 0.45;
+}
+
+.chart-hit {
+  fill: transparent;
+  cursor: default;
+  outline: none;
+}
+
+.chart-hit:focus-visible {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.chart-tooltip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.chart-tooltip span {
+  color: var(--muted);
+}
+
+details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 4px 0 8px;
+}
+
+/* Classes ABC: escala ordinal (não são status de alerta). */
+.abc-A {
+  background: var(--series-1);
+  color: #fff;
+}
+
+.abc-B {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--series-1);
+}
+
+.abc-C {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}

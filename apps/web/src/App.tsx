@@ -5,6 +5,7 @@ import { RequirePermission } from './components/RequirePermission.tsx'
 import { LoginPage } from './pages/LoginPage.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
 import { ProfilePage } from './pages/ProfilePage.tsx'
+import { ReportsPage } from './pages/reports/ReportsPage.tsx'
 import { ProductFormPage } from './pages/products/ProductFormPage.tsx'
 import { ProductListPage } from './pages/products/ProductListPage.tsx'
 import { PosPage } from './pages/sales/PosPage.tsx'
@@ -76,6 +77,14 @@ export default function App() {
           element={
             <RequirePermission permission="vendas:ler">
               <SaleDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="relatorios"
+          element={
+            <RequirePermission permission="relatorios:ler">
+              <ReportsPage />
             </RequirePermission>
           }
         />

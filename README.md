@@ -46,6 +46,7 @@ Health check: `GET /api/health`.
 | `npm run db:migrate -w @mini-erp/api` | cria e aplica uma migration em dev |
 | `npm run db:seed -w @mini-erp/api` | sincroniza papéis/permissões e cria o admin (idempotente) |
 | `npm run db:studio -w @mini-erp/api` | abre o Prisma Studio |
+| `npm run perf:reports -w @mini-erp/api` | mede os relatórios com 50 mil vendas num banco separado |
 | `npm run db:down` | para o Postgres |
 
 ## Roadmap
@@ -55,5 +56,5 @@ Health check: `GET /api/health`.
 - [x] Fase 3: catálogo (produtos, categorias, optimistic locking, busca trigram)
 - [x] Fase 4: estoque (ledger imutável, saldo atômico, custo médio, estornos, idempotência)
 - [x] Fase 5: vendas (atômicas, sem deadlock, desconto com rateio exato, cancelamento, PDV)
-- [ ] Fase 6: relatórios
+- [x] Fase 6: relatórios (fuso de SP, ABC, margem, reposição, CSV seguro, desempenho medido)
 - [ ] Fase 7: qualidade e deploy

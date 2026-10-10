@@ -3,6 +3,7 @@ import { createProductSchema, quantitySchema } from './catalog.js';
 import { isValidGtin } from './gtin.js';
 import { centsToInput, parseBrlToCents } from './money.js';
 import { balancesQuerySchema, createAdjustmentSchema, createEntrySchema } from './inventory.js';
+import { periodSchema } from './reports.js';
 
 describe('parseBrlToCents', () => {
   it.each([
@@ -83,5 +84,22 @@ describe('contratos de estoque', () => {
   it('lista de ids de produto vem separada por vírgula', () => {
     expect(balancesQuerySchema.parse({ productIds: `${productId},${productId}` }).productIds).toHaveLength(2);
     expect(balancesQuerySchema.safeParse({ productIds: 'x' }).success).toBe(false);
+  });
+});
+
+describe('contratos de relatórios', () => {
+  it('período: data inicial não pode passar da final', () => {
+    expect(periodSchema.safeParse({ from: '2026-10-10', to: '2026-10-01' }).success).toBe(false);
+    expect(periodSchema.safeParse({ from: '2026-10-01', to: '2026-10-01' }).success).toBe(true);
+  });
+
+  it('período: no máximo 366 dias', () => {
+    expect(periodSchema.safeParse({ from: '2025-10-10', to: '2026-10-10' }).success).toBe(true); // 365
+    expect(periodSchema.safeParse({ from: '2024-10-10', to: '2026-10-10' }).success).toBe(false);
+  });
+
+  it('rejeita data inválida', () => {
+    expect(periodSchema.safeParse({ from: '2026-02-30', to: '2026-03-01' }).success).toBe(false);
+    expect(periodSchema.safeParse({ from: '10/10/2026', to: '2026-10-10' }).success).toBe(false);
   });
 });

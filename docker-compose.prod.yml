@@ -83,12 +83,17 @@ services:
       api:
         condition: service_healthy
 
-  # Backup diário com rotação (D41). ATENÇÃO: o volume fica no MESMO servidor.
-  # Copie /backups para fora (outro servidor, S3...) — ver docs/deploy.md.
+  # Backup diário com rotação local + cópia fora do servidor via rclone (ADR 0014).
+  # Sem deploy/.env.offsite, só o backup local roda (e ele fica no MESMO disco do banco).
   backup:
-    image: postgres:18-alpine
+    build:
+      context: .
+      dockerfile: deploy/backup.Dockerfile
     restart: unless-stopped
-    entrypoint: ["/bin/sh", "/scripts/backup.sh"]
+    # Credenciais do armazenamento remoto num arquivo SEPARADO das senhas do banco.
+    env_file:
+      - path: deploy/.env.offsite
+        required: false
     environment:
       PGHOST: postgres
       PGUSER: ${POSTGRES_USER}
@@ -97,8 +102,6 @@ services:
       BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
       BACKUP_KEEP: ${BACKUP_KEEP:-7}
     volumes:
-      - ./deploy/backup.sh:/scripts/backup.sh:ro
-      - ./deploy/restore-check.sh:/scripts/restore-check.sh:ro
       - backups:/backups
     depends_on:
       # Espera as migrations: sem isso, o 1º backup de um servidor novo saía VAZIO (sem

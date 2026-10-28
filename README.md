@@ -74,7 +74,12 @@ build, auditoria de dependências e o build das imagens a cada push.
 
 ### Próximos passos
 
-- [ ] Troca de senha pelo próprio usuário
+- [x] Troca de senha, edição de papéis e redefinição de senha pelo admin (ADR 0014)
+- [x] Renomear e excluir categorias; trava de unidade com saldo fracionado
+- [x] Categoria fotografada na venda (relatório de margem por categoria)
+- [x] Rate limit compartilhado no Postgres e faxina periódica de sessões
+- [x] Backup fora do servidor via rclone, com teste de restauração da cópia remota
+- [x] Prisma 8 avaliado: ainda é release candidate, mantido o 7.10.1 (ADR 0014)
+- [ ] Criar o repositório remoto (o CI roda no primeiro push)
 - [ ] Escolher hospedagem e publicar (ver `docs/deploy.md`)
-- [ ] Enviar backups para fora do servidor (S3/B2)
-- [ ] Avaliar o Prisma 8 (nova major)
+- [ ] Migrar para o Prisma 8 quando sair a versão estável

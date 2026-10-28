@@ -72,12 +72,21 @@ ar** e o erro aparece em `docker compose ... logs migrate`.
 
   Ele restaura o backup mais recente num banco temporário e confere schema e invariantes de
   negócio. Saída esperada: `OK: backup restaurável e consistente`.
-- ⚠️ **O volume de backup fica no mesmo servidor.** Se o disco morrer, vai junto. Copie os
-  arquivos para outro lugar, por exemplo com um cron no host:
+- **Cópia fora do servidor (recomendado):** o volume local fica no MESMO disco do banco. Para
+  enviar cada backup a outro lugar (S3, Backblaze B2, Cloudflare R2, SFTP...) via rclone:
 
   ```bash
-  docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod cp backup:/backups ./backups-copia
-  # e envie ./backups-copia para outro servidor / armazenamento de objetos (S3, B2...)
+  cp deploy/.env.offsite.example deploy/.env.offsite   # preencha destino e credenciais
+  docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod up -d --build backup
+  ```
+
+  O log passa a mostrar `offsite ok` a cada backup. Monitore por `offsite falhou`: uma falha no
+  envio não interrompe o backup local. Use uma credencial com acesso **só** a esse bucket.
+- **Teste de restauração a partir da cópia externa** (prova que dá para recuperar mesmo se o
+  servidor inteiro for perdido):
+
+  ```bash
+  docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod exec backup sh /scripts/restore-check.sh --offsite
   ```
 
 ### Restaurar de verdade (desastre)

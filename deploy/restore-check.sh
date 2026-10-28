@@ -4,14 +4,30 @@
 # O banco de produção não é tocado.
 #
 #   docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod exec backup sh /scripts/restore-check.sh
+#   ... restore-check.sh --offsite   # BAIXA a cópia remota mais recente e restaura a partir dela
 set -eu
 
-latest=$(ls -1t /backups/*.dump 2>/dev/null | head -n 1 || true)
-[ -n "$latest" ] || { echo "FALHOU: nenhum backup encontrado em /backups"; exit 1; }
-
 check_db="restore_check_$(date -u +%Y%m%d%H%M%S)"
-cleanup() { dropdb --if-exists "$check_db" >/dev/null 2>&1 || true; }
+download=""
+cleanup() {
+  dropdb --if-exists "$check_db" >/dev/null 2>&1 || true
+  [ -z "$download" ] || rm -f "$download"
+}
 trap cleanup EXIT
+
+if [ "${1:-}" = "--offsite" ]; then
+  # Prova que a cópia FORA do servidor serve: se o disco morrer, é dela que vamos depender.
+  [ -n "${OFFSITE_REMOTE:-}" ] || { echo "FALHOU: OFFSITE_REMOTE não configurado"; exit 1; }
+  name=$(rclone lsf --files-only --include "mini_erp_*.dump" "$OFFSITE_REMOTE" | sort | tail -n 1)
+  [ -n "$name" ] || { echo "FALHOU: nenhum backup em $OFFSITE_REMOTE"; exit 1; }
+  download="/tmp/$name"
+  echo "Baixando $OFFSITE_REMOTE/$name..."
+  rclone copyto "$OFFSITE_REMOTE/$name" "$download"
+  latest="$download"
+else
+  latest=$(ls -1t /backups/*.dump 2>/dev/null | head -n 1 || true)
+  [ -n "$latest" ] || { echo "FALHOU: nenhum backup encontrado em /backups"; exit 1; }
+fi
 
 echo "Restaurando $latest em $check_db..."
 createdb "$check_db"

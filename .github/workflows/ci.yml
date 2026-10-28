@@ -88,3 +88,5 @@ jobs:
           docker build -f apps/api/Dockerfile --target migrate -t mini-erp-migrate:ci .
       - name: Web (Caddy)
         run: docker build -f apps/web/Dockerfile -t mini-erp-web:ci .
+      - name: Backup (pg_dump + rclone)
+        run: docker build -f deploy/backup.Dockerfile -t mini-erp-backup:ci .

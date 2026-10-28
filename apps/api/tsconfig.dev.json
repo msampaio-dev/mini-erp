@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    // Pasta própria do modo dev: o `npm run build` (que apaga dist/) não derruba a API em execução.
+    "outDir": "./dist-dev",
+    "tsBuildInfoFile": "./dist-dev/.tsbuildinfo"
+  },
+  "exclude": ["node_modules", "test", "dist", "dist-dev", "**/*spec.ts"]
+}

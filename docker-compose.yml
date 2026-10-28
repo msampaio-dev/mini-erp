@@ -1,3 +1,7 @@
+# Nome de projeto fixo: sem ele o compose usa o nome da pasta, e outro arquivo compose
+# na mesma pasta (ex.: o de produção) passaria a compartilhar volumes com este.
+name: mini-erp
+
 services:
   postgres:
     image: postgres:18-alpine

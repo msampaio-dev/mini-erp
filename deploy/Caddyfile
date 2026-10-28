@@ -1,0 +1,42 @@
+# Proxy reverso + servidor do front (ADR 0013).
+# SITE_ADDRESS = seu domínio (ex.: erp.minhaloja.com.br) -> o Caddy emite e renova o
+# certificado HTTPS (Let's Encrypt) sozinho. Para teste local sem domínio: ":80".
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# Log de acesso em JSON no stdout (mesmo formato dos logs da API).
+	log
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# CSP: só scripts do próprio site. Mesmo que um XSS injete <script src="evil">,
+		# o navegador recusa. 'unsafe-inline' só em style (atributos style= do React).
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# API: mesma origem do front (sem CORS, cookie de sessão simples).
+	handle /api/* {
+		# Mesmo ID no log do Caddy e no log da API: dá para seguir uma requisição de ponta a ponta.
+		request_header X-Request-Id {http.request.uuid}
+		# O Caddy NÃO repassa um X-Forwarded-For vindo do cliente (não está em trusted_proxies):
+		# ele escreve o IP real. Por isso a API confia em exatamente 1 salto (TRUST_PROXY=1).
+		reverse_proxy api:3000
+	}
+
+	# Front (SPA): arquivo existente ou index.html (o React Router resolve a rota).
+	handle {
+		root * /srv
+		# Arquivos com hash no nome nunca mudam: cache de 1 ano.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		# index.html sempre revalidado: um deploy novo aparece no próximo carregamento.
+		@notAssets not path /assets/*
+		header @notAssets Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

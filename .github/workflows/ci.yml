@@ -1,0 +1,90 @@
+# Integração contínua (ADR 0013, D38): nada entra na main sem passar por tudo isto.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Um push novo no mesmo branch cancela a execução anterior (economiza minutos de CI).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint, tipos e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Postgres de verdade para os testes e2e: mesma versão da produção.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: erp
+          POSTGRES_PASSWORD: erp
+          POSTGRES_DB: mini_erp
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U erp -d mini_erp"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+
+    env:
+      # Os e2e derivam daqui o banco mini_erp_test, que eles mesmos criam e migram.
+      DATABASE_URL: postgresql://erp:erp@localhost:5432/mini_erp?schema=public
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      # `npm ci` (não `install`): instala EXATAMENTE o package-lock.json, e falha se ele
+      # estiver dessincronizado com o package.json.
+      - run: npm ci
+
+      - name: Contratos e client do Prisma
+        run: |
+          npm run build:contracts
+          npx --workspace @mini-erp/api prisma generate
+
+      - run: npm run lint
+
+      - name: Tipos (API e front)
+        run: |
+          npx --workspace @mini-erp/api tsc --noEmit -p tsconfig.json
+          npx --workspace @mini-erp/web tsc -b
+
+      - name: Testes de contratos e unitários
+        run: npm test
+
+      - name: Testes e2e (Postgres real)
+        run: npm run test:e2e -w @mini-erp/api
+
+      - name: Build
+        run: npm run build
+
+      # Vulnerabilidades em dependências de PRODUÇÃO bloqueiam o merge (ADR 0006).
+      - name: Auditoria de dependências de produção
+        run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    name: Imagens Docker
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      # Só constrói (não publica): garante que os Dockerfiles continuam válidos.
+      - name: API (runtime e migrate)
+        run: |
+          docker build -f apps/api/Dockerfile --target runtime -t mini-erp-api:ci .
+          docker build -f apps/api/Dockerfile --target migrate -t mini-erp-migrate:ci .
+      - name: Web (Caddy)
+        run: docker build -f apps/web/Dockerfile -t mini-erp-web:ci .

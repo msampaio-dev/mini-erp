@@ -1,0 +1,13 @@
+# Nunca enviar ao contexto de build: segredos, artefatos locais e dependências da máquina.
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+apps/api/src/generated
+.git
+.claude
+docs
+*.log

@@ -1,0 +1,113 @@
+# Stack de produção (ADR 0013). Uso:
+#   cp deploy/.env.prod.example deploy/.env.prod   # e preencha
+#   docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+#
+# Só o serviço `web` (Caddy) expõe portas. Banco e API ficam na rede interna.
+
+# Nome de projeto PRÓPRIO: volumes, redes e containers nunca colidem com o compose de
+# desenvolvimento (docker-compose.yml, projeto "mini-erp"). Ver ADR 0013.
+name: mini-erp-prod
+
+x-db-env: &db-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:?defina POSTGRES_USER}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?defina POSTGRES_DB}?schema=public
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Roda UMA vez por deploy e termina: migrations + seed idempotente (papéis/permissões
+  # do código e o primeiro admin). Separado da API: com várias réplicas, ninguém disputa
+  # quem migra, e uma migration com erro impede a versão nova de subir (D40).
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrate
+    restart: "no"
+    environment:
+      <<: *db-env
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?defina SEED_ADMIN_EMAIL}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?defina SEED_ADMIN_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      WEB_ORIGIN: ${PUBLIC_URL:?defina PUBLIC_URL}
+      TRUST_PROXY: 1
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-8}
+      LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-5}
+    # Sistema de arquivos somente leitura + sem capacidades extras: superfície mínima.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - caddy_data:/data # certificados HTTPS: perder isto = reemitir (limite do Let's Encrypt)
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Backup diário com rotação (D41). ATENÇÃO: o volume fica no MESMO servidor.
+  # Copie /backups para fora (outro servidor, S3...) — ver docs/deploy.md.
+  backup:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/scripts/backup.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+    volumes:
+      - ./deploy/backup.sh:/scripts/backup.sh:ro
+      - ./deploy/restore-check.sh:/scripts/restore-check.sh:ro
+      - backups:/backups
+    depends_on:
+      # Espera as migrations: sem isso, o 1º backup de um servidor novo saía VAZIO (sem
+      # tabelas). Descoberto pelo restore-check.sh no primeiro teste da stack.
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+  backups:

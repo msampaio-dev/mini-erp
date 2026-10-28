@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { CreateUserInput, User } from '@mini-erp/contracts';
+import type { CreateUserInput, RoleKey, User } from '@mini-erp/contracts';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { uniqueViolationTarget } from '../../../common/prisma-errors.js';
 import { PrismaService } from '../../../infra/prisma/prisma.service.js';
@@ -72,10 +72,76 @@ export class UsersService {
       throw new BadRequestException('Você não pode desativar o próprio usuário');
     }
     await this.prisma.$transaction(async (tx) => {
+      await this.assertKeepsAnAdmin(tx, id);
       const { count } = await tx.user.updateMany({ where: { id }, data: { active: false } });
       if (count === 0) throw new NotFoundException('Usuário não encontrado');
       await this.sessions.revokeAllForUser(id, tx);
     });
+  }
+
+  /**
+   * Troca os papéis. Vale na PRÓXIMA requisição do usuário: as permissões são carregadas
+   * a cada request (ADR 0007), não ficam congeladas na sessão.
+   */
+  async updateRoles(id: string, roles: RoleKey[], actorId: string): Promise<User> {
+    if (id === actorId) {
+      // Evita que um admin tire de si mesmo o acesso à tela que permitiria desfazer o erro.
+      throw new BadRequestException('Você não pode alterar os próprios papéis');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      if (!roles.includes('ADMIN')) await this.assertKeepsAnAdmin(tx, id);
+      const exists = await tx.user.count({ where: { id } });
+      if (!exists) throw new NotFoundException('Usuário não encontrado');
+      await tx.userRole.deleteMany({ where: { userId: id } });
+      await tx.userRole.createMany({
+        data: (await tx.role.findMany({ where: { key: { in: roles } }, select: { id: true } })).map((r) => ({
+          userId: id,
+          roleId: r.id,
+        })),
+      });
+    });
+    return toUser(await this.prisma.user.findUniqueOrThrow({ where: { id }, select: userSelect }));
+  }
+
+  /** Administrador define uma senha nova (usuário esqueceu): as sessões dele caem. */
+  async resetPassword(id: string, newPassword: string, actorId: string) {
+    if (id === actorId) {
+      throw new BadRequestException('Para a sua própria senha, use "Meu acesso" (exige a senha atual)');
+    }
+    const passwordHash = await hashPassword(newPassword);
+    await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.user.updateMany({ where: { id }, data: { passwordHash } });
+      if (count === 0) throw new NotFoundException('Usuário não encontrado');
+      await this.sessions.revokeAllForUser(id, tx);
+    });
+  }
+
+  /**
+   * Regra: o sistema nunca pode ficar sem um administrador ativo.
+   *
+   * Concorrência: dois admins tirando o papel um do outro AO MESMO TEMPO veriam, cada um,
+   * "sobra outro admin" e ambos passariam. A trava consultiva serializa toda alteração que
+   * pode remover um admin; a contagem vem DEPOIS, numa instrução nova, que em READ COMMITTED
+   * enxerga o que a transação anterior acabou de confirmar.
+   *
+   * Por que não SELECT ... FOR UPDATE nas linhas dos admins? Ao reavaliar após a espera, o
+   * Postgres relê só as linhas TRAVADAS (users); as do JOIN (user_roles) seguem da foto antiga,
+   * e "tirar o papel" apaga uma linha de user_roles, não de users. O bug sobreviveria à trava.
+   */
+  private async assertKeepsAnAdmin(tx: Prisma.TransactionClient, targetId: string) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('access:admin-roles'))`;
+    const admins = await tx.$queryRaw<{ id: string }[]>`
+      SELECT u.id FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON r.id = ur.role_id
+      WHERE r.key = 'ADMIN' AND u.active`;
+    const targetIsAdmin = admins.some((a) => a.id === targetId);
+    if (targetIsAdmin && admins.length === 1) {
+      throw new ConflictException({
+        code: 'LAST_ADMIN',
+        message: 'Este é o último administrador ativo: o sistema não pode ficar sem nenhum',
+      });
+    }
   }
 
   async activate(id: string) {

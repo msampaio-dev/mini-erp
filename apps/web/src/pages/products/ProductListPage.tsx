@@ -66,11 +66,16 @@ export function ProductListPage() {
     <section>
       <div className="row">
         <h1>Produtos</h1>
-        {can('produtos:gerenciar') && (
-          <Link to="/produtos/novo" className="button">
-            Novo produto
+        <div className="actions">
+          <Link to="/produtos/categorias" className="button secondary">
+            Categorias
           </Link>
-        )}
+          {can('produtos:gerenciar') && (
+            <Link to="/produtos/novo" className="button">
+              Novo produto
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="filters">

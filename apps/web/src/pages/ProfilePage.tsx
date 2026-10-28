@@ -1,5 +1,6 @@
 import { ALL_PERMISSIONS, PERMISSIONS } from '@mini-erp/contracts'
 import { useAuth } from '../auth/auth-context.ts'
+import { ChangePasswordForm } from './ChangePasswordForm.tsx'
 
 /** Quem sou eu e o que posso fazer: útil para o usuário entender por que algo não aparece. */
 export function ProfilePage() {
@@ -21,6 +22,8 @@ export function ProfilePage() {
           </li>
         ))}
       </ul>
+
+      <ChangePasswordForm />
     </section>
   )
 }

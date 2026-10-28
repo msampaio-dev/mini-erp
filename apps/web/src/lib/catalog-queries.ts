@@ -9,7 +9,7 @@ import {
   type UpdateProductInput,
 } from '@mini-erp/contracts'
 import { z } from 'zod'
-import { apiGet, apiPost, apiSend, toQueryString } from './api.ts'
+import { apiDelete, apiGet, apiPost, apiSend, toQueryString } from './api.ts'
 
 export interface ProductListParams {
   q?: string
@@ -91,6 +91,27 @@ export function useCreateCategory() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: CreateCategoryInput) => apiPost('/categories', input, categorySchema),
+    onSuccess: () => qc.invalidateQueries({ queryKey: catalogKeys.categories }),
+  })
+}
+
+export function useRenameCategory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => apiSend('PATCH', `/categories/${id}`, { name }, categorySchema),
+    // O nome aparece também nos produtos: invalida as duas coisas.
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: catalogKeys.categories }),
+        qc.invalidateQueries({ queryKey: catalogKeys.products }),
+      ]),
+  })
+}
+
+export function useDeleteCategory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/categories/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: catalogKeys.categories }),
   })
 }

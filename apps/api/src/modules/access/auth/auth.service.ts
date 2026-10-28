@@ -1,6 +1,6 @@
-import { Injectable, UnauthorizedException, type OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException, type OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import type { LoginInput } from '@mini-erp/contracts';
+import type { ChangePasswordInput, LoginInput } from '@mini-erp/contracts';
 import { PrismaService } from '../../../infra/prisma/prisma.service.js';
 import { hashPassword, needsRehash, verifyPassword } from '../password/password.js';
 import { SessionService, type SessionMeta } from '../session/session.service.js';
@@ -46,5 +46,26 @@ export class AuthService implements OnModuleInit {
     }
 
     return this.sessions.create(user.id, meta);
+  }
+
+  /**
+   * Troca da própria senha. Exige a senha atual: quem roubou só a sessão (cookie) não consegue
+   * trocar a senha e trancar o dono fora. Depois, as OUTRAS sessões caem (outros aparelhos,
+   * ou um invasor) e a sessão atual continua.
+   */
+  async changePassword(userId: string, sessionId: string, input: ChangePasswordInput) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { passwordHash: true } });
+    if (!(await verifyPassword(user.passwordHash, input.currentPassword))) {
+      // 400 com erro no campo, e não 401: 401 significaria "sessão inválida" e o front faria logout.
+      throw new BadRequestException({
+        message: 'Dados inválidos',
+        errors: [{ path: 'currentPassword', message: 'Senha atual incorreta' }],
+      });
+    }
+    const passwordHash = await hashPassword(input.newPassword);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      await this.sessions.revokeOthers(userId, sessionId, tx);
+    });
   }
 }

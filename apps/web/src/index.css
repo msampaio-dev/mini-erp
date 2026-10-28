@@ -741,3 +741,17 @@ label.check {
 label.check input {
   width: auto;
 }
+
+.reset-password {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.new-category {
+  margin-bottom: 12px;
+}
+
+.row-actions {
+  justify-content: flex-end;
+}

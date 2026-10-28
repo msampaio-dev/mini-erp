@@ -1,8 +1,14 @@
 import { useState, type FormEvent } from 'react'
-import { createUserSchema, ROLE_KEYS, ROLE_LABELS, type RoleKey, type User } from '@mini-erp/contracts'
+import { createUserSchema, resetPasswordSchema, ROLE_KEYS, ROLE_LABELS, type RoleKey, type User } from '@mini-erp/contracts'
 import { useAuth } from '../../auth/auth-context.ts'
 import { ApiError } from '../../lib/api.ts'
-import { useCreateUser, useSetUserActive, useUsers } from '../../lib/users-queries.ts'
+import {
+  useCreateUser,
+  useResetUserPassword,
+  useSetUserActive,
+  useUpdateUserRoles,
+  useUsers,
+} from '../../lib/users-queries.ts'
 
 const dateFmt = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' })
 const roleNames = (roles: string[]) => roles.map((r) => ROLE_LABELS[r as RoleKey]?.name ?? r).join(', ')
@@ -11,6 +17,7 @@ export function UsersPage() {
   const { me } = useAuth()
   const { data, isPending, isError, error } = useUsers()
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<User | null>(null)
 
   return (
     <section>
@@ -23,6 +30,7 @@ export function UsersPage() {
         )}
       </div>
       {creating && <CreateUserForm onDone={() => setCreating(false)} />}
+      {editing && <EditUserPanel key={editing.id} user={editing} onDone={() => setEditing(null)} />}
 
       {isPending && <p className="muted">Carregando…</p>}
       {isError && <p className="error">Não foi possível carregar: {error.message}</p>}
@@ -41,7 +49,7 @@ export function UsersPage() {
             </thead>
             <tbody>
               {data.map((u) => (
-                <UserRow key={u.id} user={u} isMe={u.id === me?.id} />
+                <UserRow key={u.id} user={u} isMe={u.id === me?.id} onEdit={() => setEditing(u)} />
               ))}
             </tbody>
           </table>
@@ -55,7 +63,7 @@ export function UsersPage() {
   )
 }
 
-function UserRow({ user, isMe }: { user: User; isMe: boolean }) {
+function UserRow({ user, isMe, onEdit }: { user: User; isMe: boolean; onEdit: () => void }) {
   const setActive = useSetUserActive()
   const [error, setError] = useState<string | null>(null)
 
@@ -83,9 +91,14 @@ function UserRow({ user, isMe }: { user: User; isMe: boolean }) {
       <td>
         {/* A API também barra: ninguém desativa a si mesmo (evita trancar o sistema). */}
         {!isMe && (
-          <button type="button" className="secondary small" disabled={setActive.isPending} onClick={() => void toggle()}>
-            {user.active ? 'Desativar' : 'Reativar'}
-          </button>
+          <div className="inline">
+            <button type="button" className="secondary small" onClick={onEdit}>
+              Editar
+            </button>
+            <button type="button" className="secondary small" disabled={setActive.isPending} onClick={() => void toggle()}>
+              {user.active ? 'Desativar' : 'Reativar'}
+            </button>
+          </div>
         )}
         {error && <div className="field-error">{error}</div>}
       </td>
@@ -168,5 +181,89 @@ function CreateUserForm({ onDone }: { onDone: () => void }) {
         </button>
       </div>
     </form>
+  )
+}
+
+/** Papéis e senha de outro usuário. Mudança de papéis vale na próxima ação dele, sem novo login. */
+function EditUserPanel({ user, onDone }: { user: User; onDone: () => void }) {
+  const updateRoles = useUpdateUserRoles()
+  const resetPassword = useResetUserPassword()
+  const [roles, setRoles] = useState<RoleKey[]>(user.roles.filter((r): r is RoleKey => r in ROLE_LABELS))
+  const [newPassword, setNewPassword] = useState('')
+  const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+
+  async function saveRoles() {
+    if (roles.length === 0) return setMessage({ kind: 'error', text: 'Informe ao menos um papel' })
+    try {
+      await updateRoles.mutateAsync({ id: user.id, roles })
+      setMessage({ kind: 'ok', text: 'Papéis atualizados. Valem a partir da próxima ação do usuário.' })
+    } catch (err) {
+      setMessage({ kind: 'error', text: err instanceof Error ? err.message : 'Erro inesperado' })
+    }
+  }
+
+  async function savePassword(e: FormEvent) {
+    e.preventDefault()
+    const parsed = resetPasswordSchema.safeParse({ newPassword })
+    if (!parsed.success) return setMessage({ kind: 'error', text: parsed.error.issues[0]?.message ?? 'Senha inválida' })
+    try {
+      await resetPassword.mutateAsync({ id: user.id, newPassword })
+      setNewPassword('')
+      setMessage({ kind: 'ok', text: `Senha redefinida. ${user.name} foi desconectado e entra com a senha nova.` })
+    } catch (err) {
+      setMessage({ kind: 'error', text: err instanceof Error ? err.message : 'Erro inesperado' })
+    }
+  }
+
+  return (
+    <div className="panel">
+      <div className="row">
+        <h2>Editar {user.name}</h2>
+        <button type="button" className="secondary small" onClick={onDone}>
+          Fechar
+        </button>
+      </div>
+
+      <fieldset className="roles">
+        <legend>Papéis</legend>
+        {ROLE_KEYS.map((role) => (
+          <label key={role} className="check">
+            <input
+              type="checkbox"
+              checked={roles.includes(role)}
+              onChange={() => setRoles((r) => (r.includes(role) ? r.filter((x) => x !== role) : [...r, role]))}
+            />
+            <span>
+              <strong>{ROLE_LABELS[role].name}</strong> <span className="muted">· {ROLE_LABELS[role].summary}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <div className="actions">
+        <button type="button" disabled={updateRoles.isPending} onClick={() => void saveRoles()}>
+          Salvar papéis
+        </button>
+      </div>
+
+      <form className="inline reset-password" onSubmit={savePassword} noValidate>
+        <input
+          type="password"
+          autoComplete="new-password"
+          aria-label="Nova senha"
+          placeholder="Nova senha (mín. 10 caracteres)"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+        />
+        <button type="submit" className="secondary" disabled={resetPassword.isPending}>
+          Redefinir senha
+        </button>
+      </form>
+
+      {message && (
+        <p className={message.kind === 'ok' ? 'up' : 'error'} role={message.kind === 'ok' ? 'status' : 'alert'}>
+          {message.text}
+        </p>
+      )}
+    </div>
   )
 }

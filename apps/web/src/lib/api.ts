@@ -39,7 +39,7 @@ export async function apiGet<T extends z.ZodType>(path: string, schema: T): Prom
 }
 
 export async function apiSend<T extends z.ZodType>(
-  method: 'POST' | 'PUT',
+  method: 'POST' | 'PUT' | 'PATCH',
   path: string,
   body: unknown,
   schema: T,
@@ -63,4 +63,8 @@ export function toQueryString(params: Record<string, string | number | undefined
   }
   const s = search.toString()
   return s ? `?${s}` : ''
+}
+
+export async function apiDelete(path: string): Promise<void> {
+  await call('DELETE', path)
 }

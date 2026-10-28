@@ -7,8 +7,17 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
 } from '@nestjs/common';
-import { createUserSchema, type CreateUserInput, type User } from '@mini-erp/contracts';
+import {
+  createUserSchema,
+  resetPasswordSchema,
+  updateUserRolesSchema,
+  type CreateUserInput,
+  type ResetPasswordInput,
+  type UpdateUserRolesInput,
+  type User,
+} from '@mini-erp/contracts';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe.js';
 import { CurrentAuth, RequirePermission, type AuthContext } from '../access-policy.js';
 import { UsersService } from './users.service.js';
@@ -40,5 +49,24 @@ export class UsersController {
   @HttpCode(HttpStatus.NO_CONTENT)
   activate(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.activate(id);
+  }
+
+  @Put(':id/roles')
+  updateRoles(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(updateUserRolesSchema)) input: UpdateUserRolesInput,
+    @CurrentAuth() auth: AuthContext,
+  ): Promise<User> {
+    return this.users.updateRoles(id, input.roles, auth.user.id);
+  }
+
+  @Post(':id/password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  resetPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(resetPasswordSchema)) input: ResetPasswordInput,
+    @CurrentAuth() auth: AuthContext,
+  ) {
+    return this.users.resetPassword(id, input.newPassword, auth.user.id);
   }
 }

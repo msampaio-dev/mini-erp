@@ -100,4 +100,9 @@ export class SessionService {
   async revokeAllForUser(userId: string, tx: Prisma.TransactionClient = this.prisma) {
     await tx.session.deleteMany({ where: { userId } });
   }
+
+  /** Derruba as OUTRAS sessões do usuário (ex.: após trocar a senha), mantendo a atual. */
+  async revokeOthers(userId: string, keepSessionId: string, tx: Prisma.TransactionClient = this.prisma) {
+    await tx.session.deleteMany({ where: { userId, id: { not: keepSessionId } } });
+  }
 }

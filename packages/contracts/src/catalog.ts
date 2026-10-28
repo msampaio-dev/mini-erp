@@ -113,3 +113,6 @@ export const productListQuerySchema = pageQuerySchema.extend({
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
 
 export const productPageSchema = pageSchema(productSchema);
+
+export const updateCategorySchema = createCategorySchema;
+export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;

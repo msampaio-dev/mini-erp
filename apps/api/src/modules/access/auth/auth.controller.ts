@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
-import { loginSchema, type LoginInput, type Me } from '@mini-erp/contracts';
+import { changePasswordSchema, loginSchema, type ChangePasswordInput, type LoginInput, type Me } from '@mini-erp/contracts';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe.js';
 import { Authenticated, CurrentAuth, Public, type AuthContext } from '../access-policy.js';
 import { toMe } from '../auth-context.js';
@@ -51,5 +51,16 @@ export class AuthController {
   @Authenticated()
   me(@CurrentAuth() auth: AuthContext): Me {
     return toMe(auth);
+  }
+
+  @Post('password')
+  @Authenticated()
+  @UseGuards(ThrottlerGuard) // conferir a senha atual também é alvo de força bruta
+  @HttpCode(HttpStatus.NO_CONTENT)
+  changePassword(
+    @Body(new ZodValidationPipe(changePasswordSchema)) input: ChangePasswordInput,
+    @CurrentAuth() auth: AuthContext,
+  ) {
+    return this.auth.changePassword(auth.user.id, auth.sessionId, input);
   }
 }

@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
 import { ProfilePage } from './pages/ProfilePage.tsx'
 import { ReportsPage } from './pages/reports/ReportsPage.tsx'
+import { CategoriesPage } from './pages/products/CategoriesPage.tsx'
 import { ProductFormPage } from './pages/products/ProductFormPage.tsx'
 import { ProductListPage } from './pages/products/ProductListPage.tsx'
 import { PosPage } from './pages/sales/PosPage.tsx'
@@ -38,6 +39,14 @@ export default function App() {
           element={
             <RequirePermission permission="produtos:gerenciar">
               <ProductFormPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="produtos/categorias"
+          element={
+            <RequirePermission permission="produtos:ler">
+              <CategoriesPage />
             </RequirePermission>
           }
         />

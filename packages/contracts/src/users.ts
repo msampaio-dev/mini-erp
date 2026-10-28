@@ -37,3 +37,24 @@ export const userSchema = z.object({
 });
 
 export type User = z.infer<typeof userSchema>;
+
+/** O próprio usuário troca a senha: exige a atual (quem roubou só a sessão não consegue). */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Informe a senha atual').max(256),
+    newPassword: passwordSchema,
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: 'A nova senha deve ser diferente da atual',
+    path: ['newPassword'],
+  });
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/** Administrador define uma senha nova para outro usuário (ex.: esqueceu a senha). */
+export const resetPasswordSchema = z.object({ newPassword: passwordSchema });
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const updateUserRolesSchema = z.object({
+  roles: z.array(z.enum(ROLE_KEYS)).min(1, 'Informe ao menos um papel'),
+});
+export type UpdateUserRolesInput = z.infer<typeof updateUserRolesSchema>;

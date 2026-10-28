@@ -1,5 +1,11 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { createCategorySchema, type Category, type CreateCategoryInput } from '@mini-erp/contracts';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import {
+  createCategorySchema,
+  updateCategorySchema,
+  type Category,
+  type CreateCategoryInput,
+  type UpdateCategoryInput,
+} from '@mini-erp/contracts';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe.js';
 import { RequirePermission } from '../../access/access-policy.js';
 import { CategoriesService } from './categories.service.js';
@@ -18,5 +24,21 @@ export class CategoriesController {
   @RequirePermission('produtos:gerenciar')
   create(@Body(new ZodValidationPipe(createCategorySchema)) input: CreateCategoryInput): Promise<Category> {
     return this.categories.create(input);
+  }
+
+  @Patch(':id')
+  @RequirePermission('produtos:gerenciar')
+  rename(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(updateCategorySchema)) input: UpdateCategoryInput,
+  ): Promise<Category> {
+    return this.categories.rename(id, input);
+  }
+
+  @Delete(':id')
+  @RequirePermission('produtos:gerenciar')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.categories.remove(id);
   }
 }

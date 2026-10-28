@@ -88,11 +88,16 @@ export const salesSeriesSql = (p: Period, granularity: Granularity) => Prisma.sq
 
 /** Margem por produto ou por categoria (receita líquida - custo fotografado). */
 export const marginSql = (p: Period, groupBy: 'product' | 'category') => {
+  // Produto: agrupa pela ENTIDADE e mostra o nome atual (renomear não cria "outro produto").
+  // Categoria: usa a FOTOGRAFIA da venda (i.category_id): se o produto mudou de categoria, o
+  // faturamento antigo fica na categoria antiga. Nome: o atual da categoria; se ela foi
+  // excluída, o nome registrado na venda (ADR 0014).
   const key =
     groupBy === 'product'
       ? Prisma.sql`p.id AS id, p.sku AS sku, p.name AS name`
-      : Prisma.sql`c.id AS id, NULL::text AS sku, coalesce(c.name::text, 'Sem categoria') AS name`;
-  const group = groupBy === 'product' ? Prisma.sql`p.id, p.sku, p.name` : Prisma.sql`c.id, c.name`;
+      : Prisma.sql`i.category_id AS id, NULL::text AS sku,
+                   coalesce(c.name::text, max(i.category_name), 'Sem categoria') AS name`;
+  const group = groupBy === 'product' ? Prisma.sql`p.id, p.sku, p.name` : Prisma.sql`i.category_id, c.name`;
   return Prisma.sql`
     WITH ${bounds(p)}
     SELECT ${key},
@@ -101,7 +106,7 @@ export const marginSql = (p: Period, groupBy: 'product' | 'category') => {
            round(sum(i.quantity * i.unit_cost_cents))::bigint AS cost
     FROM ${itemsWithSale}
     JOIN products p ON p.id = i.product_id
-    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN categories c ON c.id = i.category_id
     WHERE s.status = 'COMPLETED' AND ${inPeriod}
     GROUP BY ${group}
     ORDER BY (sum(i.net_cents) - round(sum(i.quantity * i.unit_cost_cents))) DESC, 3`;

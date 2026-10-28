@@ -48,6 +48,14 @@ function mapWriteError(err: unknown): never {
   if (target?.includes('barcode')) throw new ConflictException('Já existe um produto com este código de barras');
   if (target !== null) throw new ConflictException('Já existe um produto com este SKU');
   if (isForeignKeyViolation(err)) throw new BadRequestException('Categoria não encontrada');
+  // Recusa do trigger products_unit_guard (ADR 0014): a regra cruza Catálogo e Estoque.
+  if (err instanceof Error && err.message.includes('UNIT_FRACTIONAL_STOCK')) {
+    throw new ConflictException({
+      code: 'UNIT_FRACTIONAL_STOCK',
+      message:
+        'O saldo deste produto é fracionado, e a unidade escolhida só aceita inteiros. Ajuste o estoque para um número inteiro antes de trocar a unidade.',
+    });
+  }
   throw err;
 }
 

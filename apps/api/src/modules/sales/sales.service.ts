@@ -143,6 +143,8 @@ export class SalesService {
             discountCents: amounts.discountCents,
             netCents: amounts.netCents,
             unitCostCents,
+            categoryId: product.category?.id ?? null,
+            categoryName: product.category?.name ?? null,
             stockMovementId: movementId,
           });
         }

@@ -284,6 +284,11 @@ model SaleItem {
   grossCents      Int     @map("gross_cents")
   discountCents   Int     @map("discount_cents")
   netCents        Int     @map("net_cents")
+  /// Fotografia da categoria na venda (ADR 0014): mudar o produto de categoria depois não
+  /// "leva junto" o faturamento antigo. Sem FK: a categoria pode ser excluída no futuro, e o
+  /// histórico mantém o nome que ela tinha.
+  categoryId      String? @map("category_id") @db.Uuid
+  categoryName    String? @map("category_name")
   /// Custo médio no instante da baixa (D24): base do relatório de margem.
   unitCostCents   Decimal @map("unit_cost_cents") @db.Decimal(18, 4)
   /// A saída de estoque que esta linha gerou. Vendas aponta para Estoque, nunca o contrário.

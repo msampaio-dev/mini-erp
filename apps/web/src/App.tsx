@@ -12,6 +12,7 @@ import { PosPage } from './pages/sales/PosPage.tsx'
 import { SaleDetailPage } from './pages/sales/SaleDetailPage.tsx'
 import { SalesListPage } from './pages/sales/SalesListPage.tsx'
 import { StockPage } from './pages/stock/StockPage.tsx'
+import { UsersPage } from './pages/users/UsersPage.tsx'
 
 export default function App() {
   const { me, can } = useAuth()
@@ -85,6 +86,14 @@ export default function App() {
           element={
             <RequirePermission permission="relatorios:ler">
               <ReportsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="usuarios"
+          element={
+            <RequirePermission permission="usuarios:gerenciar">
+              <UsersPage />
             </RequirePermission>
           }
         />

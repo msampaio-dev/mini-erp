@@ -10,6 +10,14 @@ export const passwordSchema = z
 export const ROLE_KEYS = ['ADMIN', 'GERENTE', 'VENDEDOR', 'ESTOQUISTA'] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
+/** Nome e resumo de cada papel, para a interface (as permissões em si ficam na API). */
+export const ROLE_LABELS: Record<RoleKey, { name: string; summary: string }> = {
+  ADMIN: { name: 'Administrador', summary: 'Acesso total, inclusive usuários' },
+  GERENTE: { name: 'Gerente', summary: 'Tudo, exceto gerir usuários' },
+  VENDEDOR: { name: 'Vendedor', summary: 'Caixa e consulta de vendas' },
+  ESTOQUISTA: { name: 'Estoquista', summary: 'Entradas e consulta de estoque' },
+};
+
 export const createUserSchema = z.object({
   name: z.string().trim().min(2, 'Nome muito curto').max(120),
   email: emailSchema,

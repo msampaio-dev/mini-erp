@@ -1,6 +1,13 @@
 import type { CookieOptions, Response } from 'express';
 
-export const SESSION_COOKIE = 'erp_session';
+const isProduction = process.env['NODE_ENV'] === 'production';
+
+/**
+ * Em produção o cookie usa o prefixo `__Host-`: o navegador SÓ o aceita se for Secure,
+ * Path=/ e sem Domain. Isso impede que um subdomínio (ex.: um blog em blog.empresa.com)
+ * injete ou sobrescreva o cookie de sessão do ERP. Em dev (HTTP) o prefixo não é permitido.
+ */
+export const SESSION_COOKIE = isProduction ? '__Host-erp_session' : 'erp_session';
 
 /**
  * - httpOnly: JavaScript no navegador não lê o cookie (mitiga roubo via XSS).
@@ -11,7 +18,7 @@ function baseOptions(): CookieOptions {
   return {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env['NODE_ENV'] === 'production',
+    secure: isProduction,
     path: '/',
   };
 }

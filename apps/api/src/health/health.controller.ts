@@ -13,6 +13,17 @@ import { Public } from '../modules/access/access-policy.js';
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * LIVENESS: "o processo está vivo?". Não toca no banco. Se falhar, o orquestrador
+   * reinicia o container. Se dependesse do banco, uma queda do Postgres faria todas as
+   * instâncias reiniciarem em loop sem resolver nada.
+   */
+  @Get('live')
+  live() {
+    return { status: 'ok' };
+  }
+
+  /** READINESS: "posso receber tráfego?". Inclui o banco: sem ele, fica fora do balanceamento. */
   @Get()
   async check(@Res({ passthrough: true }) res: Response): Promise<HealthResponse> {
     const database = await this.prisma.$queryRaw`SELECT 1`

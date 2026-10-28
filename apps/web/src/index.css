@@ -713,3 +713,31 @@ details summary {
   color: var(--muted);
   border: 1px solid var(--border);
 }
+
+/* ─── Usuários ──────────────────────────────────────────────────────── */
+
+fieldset.roles {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+fieldset.roles legend {
+  font-weight: 500;
+  padding: 0 4px;
+}
+
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+
+label.check input {
+  width: auto;
+}

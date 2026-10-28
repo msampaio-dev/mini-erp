@@ -14,6 +14,13 @@ export const envSchema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().positive().max(720).default(8),
   /** Tentativas de login por IP por minuto (proteção contra força bruta). */
   LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(5),
+  /**
+   * Quantos proxies reversos confiáveis há na frente da API (Caddy = 1).
+   * Sem isso, atrás do proxy todo cliente "tem o IP do proxy": o rate limit de login
+   * bloquearia todo mundo junto. Nunca confiar em mais saltos do que existem de fato:
+   * o cliente poderia forjar o X-Forwarded-For.
+   */
+  TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
 });
 
 export type Env = z.infer<typeof envSchema>;

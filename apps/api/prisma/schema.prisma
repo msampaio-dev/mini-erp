@@ -100,6 +100,19 @@ model Session {
   @@map("sessions")
 }
 
+/// Contadores do rate limit (ADR 0014). No banco, e não em memória: com várias instâncias
+/// da API, todas enxergam o mesmo contador. Atualizado por um único INSERT ... ON CONFLICT.
+model RateLimit {
+  /// Ex.: "login:<hash do IP>" (gerado pelo @nestjs/throttler).
+  key             String    @id
+  hits            Int
+  windowExpiresAt DateTime  @map("window_expires_at") @db.Timestamptz
+  blockedUntil    DateTime? @map("blocked_until") @db.Timestamptz
+
+  @@index([windowExpiresAt])
+  @@map("rate_limits")
+}
+
 // ─── Catálogo ──────────────────────────────────────────────────────────────
 
 enum Unit {

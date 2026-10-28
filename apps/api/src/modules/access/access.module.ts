@@ -6,19 +6,23 @@ import type { Env } from '../../config/env.js';
 import { AccessGuard } from './access.guard.js';
 import { AuthController } from './auth/auth.controller.js';
 import { AuthService } from './auth/auth.service.js';
+import { PrismaService } from '../../infra/prisma/prisma.service.js';
+import { AccessMaintenanceService } from './maintenance/access-maintenance.service.js';
+import { PrismaThrottlerStorage } from './rate-limit/prisma-throttler.storage.js';
 import { SessionService } from './session/session.service.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
 
 @Module({
   imports: [
-    // Contador em memória: suficiente para uma instância. Com várias instâncias
-    // atrás de um load balancer, troca-se o storage por Redis.
+    // Contadores no Postgres (ADR 0014): funciona igual com 1 ou N instâncias da API,
+    // sem precisar de Redis. PrismaService vem do PrismaModule (global).
     ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService<Env, true>) => [
-        { ttl: 60_000, limit: config.get('LOGIN_RATE_LIMIT', { infer: true }) },
-      ],
+      inject: [ConfigService, PrismaService],
+      useFactory: (config: ConfigService<Env, true>, prisma: PrismaService) => ({
+        throttlers: [{ ttl: 60_000, limit: config.get('LOGIN_RATE_LIMIT', { infer: true }) }],
+        storage: new PrismaThrottlerStorage(prisma),
+      }),
     }),
   ],
   controllers: [AuthController, UsersController],
@@ -26,6 +30,7 @@ import { UsersService } from './users/users.service.js';
     SessionService,
     AuthService,
     UsersService,
+    AccessMaintenanceService,
     // Registrado como APP_GUARD: protege TODAS as rotas de TODOS os módulos.
     { provide: APP_GUARD, useClass: AccessGuard },
   ],

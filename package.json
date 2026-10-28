@@ -20,8 +20,8 @@
     "node": ">=24"
   },
   "allowScripts": {
-    "prisma@7.10.0": true,
-    "@prisma/engines@7.10.0": true,
-    "esbuild": false
+    "esbuild": false,
+    "prisma@7.10.1": true,
+    "@prisma/engines@7.10.1": true
   }
 }

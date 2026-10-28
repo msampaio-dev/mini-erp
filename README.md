@@ -34,7 +34,20 @@ npm run dev:api    # API em http://localhost:3000/api
 npm run dev:web    # Front em http://localhost:5180
 ```
 
-Health check: `GET /api/health`.
+Health check: `GET /api/health` (readiness) e `GET /api/health/live` (liveness).
+
+## Produção
+
+Docker Compose com Caddy (HTTPS automático), API sem root, migrations como etapa separada e
+backup diário com teste de restauração. Passo a passo em [`docs/deploy.md`](docs/deploy.md).
+
+```bash
+cp deploy/.env.prod.example deploy/.env.prod   # preencha
+docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+```
+
+O CI (`.github/workflows/ci.yml`) roda lint, tipos, testes unitários, e2e contra Postgres real,
+build, auditoria de dependências e o build das imagens a cada push.
 
 ## Scripts úteis
 
@@ -57,4 +70,11 @@ Health check: `GET /api/health`.
 - [x] Fase 4: estoque (ledger imutável, saldo atômico, custo médio, estornos, idempotência)
 - [x] Fase 5: vendas (atômicas, sem deadlock, desconto com rateio exato, cancelamento, PDV)
 - [x] Fase 6: relatórios (fuso de SP, ABC, margem, reposição, CSV seguro, desempenho medido)
-- [ ] Fase 7: qualidade e deploy
+- [x] Fase 7: qualidade e deploy (usuários, CI, Docker, Caddy, backup testado, logs com request id)
+
+### Próximos passos
+
+- [ ] Troca de senha pelo próprio usuário
+- [ ] Escolher hospedagem e publicar (ver `docs/deploy.md`)
+- [ ] Enviar backups para fora do servidor (S3/B2)
+- [ ] Avaliar o Prisma 8 (nova major)

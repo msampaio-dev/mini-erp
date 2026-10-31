@@ -1,5 +1,7 @@
 # Mini-ERP
 
+[![CI](https://github.com/msampaio-dev/mini-erp/actions/workflows/ci.yml/badge.svg)](https://github.com/msampaio-dev/mini-erp/actions/workflows/ci.yml)
+
 Mini-ERP de estoque e vendas: cadastro de produtos, entradas e saídas de estoque,
 vendas, relatórios e controle de acesso por permissões.
 
@@ -39,7 +41,8 @@ Health check: `GET /api/health` (readiness) e `GET /api/health/live` (liveness).
 ## Produção
 
 Docker Compose com Caddy (HTTPS automático), API sem root, migrations como etapa separada e
-backup diário com teste de restauração. Passo a passo em [`docs/deploy.md`](docs/deploy.md).
+backup diário com teste de restauração. Passo a passo em [`docs/deploy.md`](docs/deploy.md)
+(Oracle Cloud gratuita: [`docs/deploy-oracle.md`](docs/deploy-oracle.md)).
 
 ```bash
 cp deploy/.env.prod.example deploy/.env.prod   # preencha
@@ -80,6 +83,6 @@ build, auditoria de dependências e o build das imagens a cada push.
 - [x] Rate limit compartilhado no Postgres e faxina periódica de sessões
 - [x] Backup fora do servidor via rclone, com teste de restauração da cópia remota
 - [x] Prisma 8 avaliado: ainda é release candidate, mantido o 7.10.1 (ADR 0014)
-- [ ] Criar o repositório remoto (o CI roda no primeiro push)
-- [ ] Escolher hospedagem e publicar (ver `docs/deploy.md`)
+- [x] Repositório público no GitHub, com CI rodando a cada push
+- [ ] Publicar na Oracle Cloud Always Free (ver `docs/deploy-oracle.md`)
 - [ ] Migrar para o Prisma 8 quando sair a versão estável

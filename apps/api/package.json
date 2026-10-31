@@ -28,7 +28,8 @@
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
     "perf:reports": "tsx scripts/perf-reports.ts",
-    "seed:demo": "nest build && node scripts/seed-demo-market.ts"
+    "seed:demo": "nest build && node scripts/seed-demo-market.ts",
+    "simulate:day": "nest build && node scripts/simulate-market-day.ts"
   },
   "dependencies": {
     "@mini-erp/contracts": "*",

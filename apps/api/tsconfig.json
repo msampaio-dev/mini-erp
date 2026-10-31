@@ -27,6 +27,7 @@
     "node_modules",
     "dist",
     "dist-dev",
-    "scripts/seed-demo-market.ts"
+    "scripts/seed-demo-market.ts",
+    "scripts/simulate-market-day.ts"
   ]
 }

@@ -55,6 +55,25 @@ comunidade; a documentação oficial não diz quantos saltos há). Em vez de adi
 `GET /api/health/client-ip`, **desligado por padrão** (`DIAGNOSTICS=true` liga), para conferir
 após o deploy que o IP é o real e que um XFF forjado não o altera.
 
+**Resultado da medição (2026-10-31), e o bug que ela encontrou:** com `TRUST_PROXY=1`, o primeiro
+teste em produção mostrou o rate limit de login **sem efeito**:
+- 7 tentativas com `X-Forwarded-For` forjado: nenhuma bloqueada;
+- sem forjar: a 6ª bloqueou, mas a 7ª passou.
+
+O diagnóstico mostrou a cadeia real:
+
+```
+X-Forwarded-For: [forjado], IP-REAL, <Cloudflare 172.x/104.x>, <balanceador Render 10.x>
+socket: ::1 (proxy local)
+```
+
+São **3 saltos confiáveis**. Com 1, `req.ip` era o balanceador `10.x`, diferente a cada
+requisição, então o contador nunca acumulava. Com **3**, `req.ip` é o IP real, e o que o cliente
+forja fica à esquerda e é ignorado (verificado de novo após a mudança).
+Alternativa registrada: o Cloudflare sobrescreve `True-Client-IP`/`CF-Connecting-IP` com o IP real
+mesmo quando o cliente envia valores falsos; serviriam como plano B se a contagem de saltos ficar
+instável. **Se o Render mudar a topologia, recalibre** (o endpoint de diagnóstico existe para isso).
+
 ### Deploy só com CI verde
 `autoDeployTrigger: checksPass` no `render.yaml`.
 

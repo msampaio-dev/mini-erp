@@ -63,7 +63,9 @@ Um valor errado permite forjar o IP e escapar do limite de tentativas de login.
    ```
 
    **Correto:** `ip` é o seu IP real **nas duas chamadas**. Se na segunda aparecer `1.2.3.4`, o
-   `TRUST_PROXY` está alto demais. Se aparecer um IP interno do Render, está baixo demais.
+   `TRUST_PROXY` está alto demais. Se aparecer um IP interno do Render (`10.x`), está baixo demais.
+   **Medido em out/2026: `TRUST_PROXY=3`** (Cloudflare + balanceador do Render + proxy local).
+   Com 1, o rate limit de login simplesmente não funcionava (ADR 0015).
 3. Volte `DIAGNOSTICS=false`.
 
 ## Dia a dia

@@ -18,9 +18,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Calibrado com /api/health/client-ip (DIAGNOSTICS=true) após o primeiro deploy.
+      # Medido com /api/health/client-ip (ADR 0015): Cloudflare + balanceador do Render +
+      # proxy local = 3 saltos. Com 1, o "IP do cliente" era o balanceador (muda a cada
+      # requisição) e o rate limit de login não segurava. Recalibre se o Render mudar a rede.
       - key: TRUST_PROXY
-        value: "1"
+        value: "3"
       - key: DIAGNOSTICS
         value: "false"
       - key: SESSION_TTL_HOURS

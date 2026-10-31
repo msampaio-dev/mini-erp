@@ -26,6 +26,10 @@ Complementa o [guia geral de deploy](deploy.md). Decisões e limites no [ADR 001
 2. Em **Connect**, copie **duas** connection strings:
    - **com pooler** (o host tem `-pooler`): vai em `DATABASE_URL`, usada pela aplicação;
    - **direta** (sem `-pooler`): vai em `DIRECT_DATABASE_URL`, usada pelas migrations.
+3. Nas duas, troque `sslmode=require` por **`sslmode=verify-full`**. Hoje o driver `pg` já trata
+   `require` como `verify-full`, mas avisa que na próxima versão major `require` deixará de
+   validar o certificado (o que abriria espaço para *man-in-the-middle*). Deixar explícito evita
+   que a segurança mude sozinha numa atualização.
 
 ## Passo 2: serviço no Render
 

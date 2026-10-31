@@ -6,7 +6,8 @@ import type { PrismaService } from '../infra/prisma/prisma.service.js';
 function makeController(queryRaw: () => Promise<unknown>) {
   const prisma = { $queryRaw: queryRaw } as unknown as PrismaService;
   const res = { status: vi.fn() };
-  return { controller: new HealthController(prisma), res };
+  const config = { get: () => false } as unknown as ConstructorParameters<typeof HealthController>[1];
+  return { controller: new HealthController(prisma, config), res };
 }
 
 describe('HealthController', () => {

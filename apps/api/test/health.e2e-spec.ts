@@ -31,6 +31,10 @@ describe('Endurecimento HTTP (e2e)', () => {
     await app.close();
   });
 
+  it('diagnóstico de IP fica desligado por padrão (404)', async () => {
+    await request(app.getHttpServer()).get('/api/health/client-ip').expect(404);
+  });
+
   it('liveness não depende do banco', async () => {
     await request(app.getHttpServer()).get('/api/health/live').expect(200, { status: 'ok' });
   });

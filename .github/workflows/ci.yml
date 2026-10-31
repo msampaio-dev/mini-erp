@@ -90,3 +90,5 @@ jobs:
         run: docker build -f apps/web/Dockerfile -t mini-erp-web:ci .
       - name: Backup (pg_dump + rclone)
         run: docker build -f deploy/backup.Dockerfile -t mini-erp-backup:ci .
+      - name: Render (API servindo o front)
+        run: docker build -f deploy/render.Dockerfile -t mini-erp-render:ci .

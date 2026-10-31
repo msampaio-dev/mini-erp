@@ -1,0 +1,41 @@
+# Blueprint do Render (ADR 0015). No painel: New → Blueprint → este repositório.
+# Banco: Neon (Postgres), na mesma região da AWS (us-east-1 ↔ virginia).
+services:
+  - type: web
+    name: mini-erp
+    runtime: docker
+    dockerfilePath: ./deploy/render.Dockerfile
+    dockerContext: .
+    plan: free
+    region: virginia
+    branch: main
+    # Só publica depois que o CI (lint, tipos, testes, e2e, imagens) passar.
+    autoDeployTrigger: checksPass
+    # Liveness, SEM banco: o Render consulta isso o tempo todo enquanto o serviço está
+    # acordado; se tocasse no Postgres, manteria o Neon acordado e gastaria as horas
+    # gratuitas de compute dele.
+    healthCheckPath: /api/health/live
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Calibrado com /api/health/client-ip (DIAGNOSTICS=true) após o primeiro deploy.
+      - key: TRUST_PROXY
+        value: "1"
+      - key: DIAGNOSTICS
+        value: "false"
+      - key: SESSION_TTL_HOURS
+        value: "8"
+      - key: LOGIN_RATE_LIMIT
+        value: "5"
+      # Neon: URL COM pooler (host com "-pooler") para a aplicação...
+      - key: DATABASE_URL
+        sync: false
+      # ...e a DIRETA (sem "-pooler") para as migrations.
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      # Gerada pelo Render (256 bits aleatórios). Veja em Environment no painel e troque
+      # a senha pelo próprio sistema (Meu acesso) no primeiro login.
+      - key: SEED_ADMIN_PASSWORD
+        generateValue: true

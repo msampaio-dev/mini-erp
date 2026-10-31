@@ -21,12 +21,24 @@ export const envSchema = z.object({
    * o cliente poderia forjar o X-Forwarded-For.
    */
   TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
+  /**
+   * Modo "um serviço só" (Render, ADR 0015): pasta com o build do React. Se definida, a API
+   * também serve o front, na MESMA origem (cookies de sessão simples, sem CORS).
+   */
+  WEB_DIST_DIR: z.string().min(1).optional(),
+  /** Liga GET /api/health/client-ip, para descobrir o TRUST_PROXY certo num provedor novo. */
+  DIAGNOSTICS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;
 
 export function validateEnv(raw: Record<string, unknown>): Env {
-  const result = envSchema.safeParse(raw);
+  // No Render, a URL pública vem pronta em RENDER_EXTERNAL_URL.
+  const withDefaults = { ...raw, WEB_ORIGIN: raw['WEB_ORIGIN'] ?? raw['RENDER_EXTERNAL_URL'] };
+  const result = envSchema.safeParse(withDefaults);
   if (!result.success) {
     throw new Error(`Variáveis de ambiente inválidas:\n${z.prettifyError(result.error)}`);
   }

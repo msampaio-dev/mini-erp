@@ -1,6 +1,6 @@
 # Guia de deploy
 
-> Vai usar o plano gratuito da Oracle Cloud? Veja o [passo a passo específico](deploy-oracle.md).
+> Hospedagem gratuita: [Render + Neon](deploy-render.md) (em uso) ou [Oracle Cloud](deploy-oracle.md).
 
 Implantação num servidor Linux com Docker (VPS de qualquer provedor). Arquitetura e decisões no
 [ADR 0013](adr/0013-qualidade-e-deploy.md).

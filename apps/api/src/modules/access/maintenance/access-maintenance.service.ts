@@ -16,17 +16,28 @@ const EVERY_HOUR = 60 * 60 * 1000;
 export class AccessMaintenanceService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(AccessMaintenanceService.name);
   private timer?: NodeJS.Timeout;
+  /** Faxina em andamento: o desligamento espera por ela antes de fechar o banco. */
+  private running: Promise<void> = Promise.resolve();
 
   constructor(private readonly prisma: PrismaService) {}
 
   onApplicationBootstrap() {
     // unref(): o timer não impede o processo de encerrar (testes, deploys).
-    this.timer = setInterval(() => void this.runSafely(), EVERY_HOUR).unref();
-    void this.runSafely();
+    this.timer = setInterval(() => this.start(), EVERY_HOUR).unref();
+    this.start();
   }
 
-  onModuleDestroy() {
+  /**
+   * Desligamento gracioso: sem esperar, um deploy (SIGTERM) que caísse no meio da faxina
+   * fecharia o pool de conexões debaixo dela ("Unable to start a transaction").
+   */
+  async onModuleDestroy() {
     clearInterval(this.timer);
+    await this.running;
+  }
+
+  private start() {
+    this.running = this.running.then(() => this.runSafely());
   }
 
   /** Remove o que expirou. Público para testes e para rodar manualmente. */

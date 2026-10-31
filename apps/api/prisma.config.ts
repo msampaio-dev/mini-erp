@@ -16,6 +16,8 @@ export default defineConfig({
     seed: 'tsx prisma/seed.ts',
   },
   datasource: {
-    url: process.env['DATABASE_URL'],
+    // Migrations pela conexão DIRETA quando houver (Neon: sem '-pooler' no host). O pooler
+    // (PgBouncer em modo transação) fica para o tráfego da aplicação (ADR 0015).
+    url: process.env['DIRECT_DATABASE_URL'] ?? process.env['DATABASE_URL'],
   },
 });

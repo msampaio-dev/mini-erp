@@ -1,5 +1,7 @@
-import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Get, HttpStatus, NotFoundException, Req, Res } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Request, Response } from 'express';
+import type { Env } from '../config/env.js';
 import type { HealthResponse } from '@mini-erp/contracts';
 import { PrismaService } from '../infra/prisma/prisma.service.js';
 import { Public } from '../modules/access/access-policy.js';
@@ -11,7 +13,10 @@ import { Public } from '../modules/access/access-policy.js';
 @Controller('health')
 @Public()
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService<Env, true>,
+  ) {}
 
   /**
    * LIVENESS: "o processo está vivo?". Não toca no banco. Se falhar, o orquestrador
@@ -21,6 +26,17 @@ export class HealthController {
   @Get('live')
   live() {
     return { status: 'ok' };
+  }
+
+  /**
+   * DIAGNÓSTICO (desligado por padrão, DIAGNOSTICS=true): mostra que IP a API enxerga e a
+   * cadeia X-Forwarded-For. Serve para calibrar o TRUST_PROXY num provedor novo (ADR 0015):
+   * com o valor certo, `ip` é o IP real do cliente e um X-Forwarded-For forjado não o altera.
+   */
+  @Get('client-ip')
+  clientIp(@Req() req: Request) {
+    if (!this.config.get('DIAGNOSTICS', { infer: true })) throw new NotFoundException();
+    return { ip: req.ip, ips: req.ips, forwardedFor: req.get('x-forwarded-for') ?? null };
   }
 
   /** READINESS: "posso receber tráfego?". Inclui o banco: sem ele, fica fora do balanceamento. */

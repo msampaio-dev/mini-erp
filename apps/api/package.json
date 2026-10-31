@@ -27,7 +27,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
-    "perf:reports": "tsx scripts/perf-reports.ts"
+    "perf:reports": "tsx scripts/perf-reports.ts",
+    "seed:demo": "nest build && node scripts/seed-demo-market.ts"
   },
   "dependencies": {
     "@mini-erp/contracts": "*",

@@ -36,7 +36,16 @@ export class HealthController {
   @Get('client-ip')
   clientIp(@Req() req: Request) {
     if (!this.config.get('DIAGNOSTICS', { infer: true })) throw new NotFoundException();
-    return { ip: req.ip, ips: req.ips, forwardedFor: req.get('x-forwarded-for') ?? null };
+    // Cabeçalhos que proxies/CDNs costumam usar para o IP do cliente. Para escolher qual
+    // é confiável, compare: um valor que o cliente forja e passa intacto NÃO serve.
+    const headers = ['x-forwarded-for', 'x-real-ip', 'true-client-ip', 'cf-connecting-ip', 'forwarded'];
+    return {
+      ip: req.ip,
+      ips: req.ips,
+      remoteAddress: req.socket.remoteAddress ?? null,
+      forwardedFor: req.get('x-forwarded-for') ?? null,
+      headers: Object.fromEntries(headers.map((h) => [h, req.get(h) ?? null])),
+    };
   }
 
   /** READINESS: "posso receber tráfego?". Inclui o banco: sem ele, fica fora do balanceamento. */

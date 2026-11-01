@@ -13,3 +13,7 @@ coverage/
 
 # Prisma client gerado (recriado por `prisma generate`)
 apps/api/src/generated/
+
+# Playwright (relatórios e evidências de falha)
+apps/e2e/test-results/
+apps/e2e/playwright-report/

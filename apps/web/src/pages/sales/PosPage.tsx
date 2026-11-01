@@ -54,7 +54,6 @@ export function PosPage() {
         l === existing ? { ...l, quantity: String((parseQuantity(l.quantity) ?? 0) + 1).replace('.', ',') } : l,
       )
     })
-    setSearch('')
     setResults(null)
     searchRef.current?.focus()
   }
@@ -63,6 +62,11 @@ export function PosPage() {
     e.preventDefault()
     const term = search.trim()
     if (!term) return
+    // Limpa o campo JÁ, antes da busca (síncrono). Um leitor de código de barras "digita" a
+    // próxima leitura enquanto a anterior ainda está buscando; se o campo fosse limpo quando
+    // a resposta chegasse, apagaria a leitura seguinte e o item se perderia (bug achado pelo
+    // teste de interface, ADR 0016).
+    setSearch('')
     setSearchError(null)
     try {
       const page = await apiGet(`/products${toQueryString({ q: term, pageSize: 10 })}`, productPageSchema)

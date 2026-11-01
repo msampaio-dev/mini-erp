@@ -58,6 +58,7 @@ build, auditoria de dependências e o build das imagens a cada push.
 |---|---|
 | `npm run build` | compila contracts, API e front |
 | `npm test` | testes dos contratos e unitários da API |
+| `npm run build && npm test -w @mini-erp/e2e` | testes de interface (Playwright) contra a configuração do Render |
 | `npm run test:e2e -w @mini-erp/api` | testes ponta a ponta num banco separado `mini_erp_test` (criado automaticamente) |
 | `npm run db:migrate -w @mini-erp/api` | cria e aplica uma migration em dev |
 | `npm run db:seed -w @mini-erp/api` | sincroniza papéis/permissões e cria o admin (idempotente) |

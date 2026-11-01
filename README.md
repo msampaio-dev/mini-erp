@@ -50,7 +50,8 @@ docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod up -d --bu
 ```
 
 O CI (`.github/workflows/ci.yml`) roda lint, tipos, testes unitários, e2e contra Postgres real,
-build, auditoria de dependências e o build das imagens a cada push.
+build, auditoria de dependências, testes de interface (Playwright) e o build das imagens a cada
+push. O `.github/workflows/backup.yml` faz o backup diário da produção, criptografado (ADR 0017).
 
 ## Scripts úteis
 
@@ -86,4 +87,6 @@ build, auditoria de dependências e o build das imagens a cada push.
 - [x] Prisma 8 avaliado: ainda é release candidate, mantido o 7.10.1 (ADR 0014)
 - [x] Repositório público no GitHub, com CI rodando a cada push
 - [x] Publicado no Render + Neon, com rate limit de login validado em produção (ADR 0015)
+- [x] Testes de interface com Playwright no CI (ADR 0016)
+- [x] Backup diário da produção, criptografado e com teste de restauração (ADR 0017)
 - [ ] Migrar para o Prisma 8 quando sair a versão estável

@@ -1,0 +1,86 @@
+# Backup diário do banco de produção (Neon), criptografado (ADR 0017).
+#
+#   dump (usuário SÓ LEITURA, certificado validado)
+#     → restauração num Postgres temporário + invariantes de negócio (backup que não restaura = falha)
+#     → criptografia com a CHAVE PÚBLICA (age): só a chave privada, guardada fora do GitHub, abre
+#     → artefato do GitHub por 30 dias
+#
+# O repositório é PÚBLICO: artefatos e logs também são. Por isso o arquivo sai cifrado e os logs
+# não mostram dados nem contagens. Pré-requisito: secret NEON_BACKUP_URL (ver docs/deploy-render.md).
+name: Backup do banco
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC = 03:00 em Brasília (movimento mínimo)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Dump, verificação e criptografia
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Postgres descartável, só para provar que o backup restaura.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: check
+          POSTGRES_PASSWORD: check
+          POSTGRES_DB: restore_check
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U check -d restore_check"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Conferir o secret
+        env:
+          NEON_BACKUP_URL: ${{ secrets.NEON_BACKUP_URL }}
+        run: |
+          test -n "$NEON_BACKUP_URL" || { echo "::error::Defina o secret NEON_BACKUP_URL (docs/deploy-render.md)"; exit 1; }
+
+      # pg_dump da MESMA versão do servidor (18), via imagem oficial.
+      # PGSSLROOTCERT=system: com sslmode=verify-full, a libpq valida o certificado do Neon
+      # usando as autoridades do sistema (sem isso ela recusa a conexão, que é o seguro).
+      - name: Dump do Neon (usuário só leitura)
+        env:
+          NEON_BACKUP_URL: ${{ secrets.NEON_BACKUP_URL }}
+        run: |
+          mkdir -p work
+          docker run --rm -e NEON_BACKUP_URL -e PGSSLROOTCERT=system -v "$PWD/work:/out" postgres:18-alpine \
+            sh -c 'pg_dump --format=custom --no-owner --no-privileges --file=/out/db.dump "$NEON_BACKUP_URL"'
+          test -s work/db.dump
+
+      - name: Restaurar e conferir as invariantes
+        run: |
+          docker run --rm --network host -v "$PWD/work:/in:ro" -v "$PWD/deploy/backup-invariants.sql:/check.sql:ro" \
+            postgres:18-alpine sh -c '
+              export PGPASSWORD=check
+              pg_restore --no-owner --no-privileges --exit-on-error -h localhost -U check -d restore_check /in/db.dump
+              psql -h localhost -U check -d restore_check -v ON_ERROR_STOP=1 -q -f /check.sql'
+
+      - name: Criptografar com a chave pública
+        run: |
+          sudo apt-get install -y -qq age >/dev/null
+          name="mini-erp-$(date -u +%Y%m%dT%H%MZ).dump.age"
+          age -R deploy/backup-public-key.txt -o "$name" work/db.dump
+          sudo rm -rf work
+          echo "BACKUP_FILE=$name" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_FILE }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 30
+          compression-level: 0 # já cifrado: comprimir de novo só gasta tempo
+          if-no-files-found: error

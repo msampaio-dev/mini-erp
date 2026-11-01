@@ -72,10 +72,14 @@ Um valor errado permite forjar o IP e escapar do limite de tentativas de login.
 
 - **Atualizar:** é só dar push na `main`. O Render publica **depois que o CI passar**
   (`autoDeployTrigger: checksPass`). Se a versão nova falhar ao subir, a anterior continua no ar.
-- **Backup:** o Render gratuito não roda o nosso serviço de backup. O Neon guarda um histórico
-  curto que permite restaurar o banco a um ponto no tempo (veja o limite atual do plano free no
-  painel). Para dados importantes, rode periodicamente, do seu computador:
+- **Backup:** automático, todo dia às 03:00 (Brasília), pelo workflow `Backup do banco` do
+  GitHub Actions (ADR 0017). Ele faz o dump com um usuário só leitura, restaura num Postgres
+  temporário, confere as invariantes e guarda o arquivo **criptografado** por 30 dias.
+  Configuração, uma vez só:
+  1. Secret `NEON_BACKUP_URL` no GitHub: a URL **direta** (sem `-pooler`) do papel
+     `backup_reader`, com `sslmode=verify-full`.
+  2. Chave privada (`age`) guardada fora do GitHub, num gerenciador de senhas **e** numa cópia
+     offline. Sem ela nenhum backup abre. A chave pública fica em `deploy/backup-public-key.txt`.
 
-  ```bash
-  pg_dump --format=custom --file=mini_erp_$(date +%F).dump "URL-DIRETA-DO-NEON"
-  ```
+  Como restaurar: veja a ADR 0017. O Neon também guarda um histórico curto para restaurar o
+  banco a um ponto no tempo (veja o limite do plano free no painel).

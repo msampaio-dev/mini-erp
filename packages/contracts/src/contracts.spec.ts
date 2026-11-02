@@ -4,6 +4,7 @@ import { isValidGtin } from './gtin.js';
 import { centsToInput, parseBrlToCents } from './money.js';
 import { balancesQuerySchema, createAdjustmentSchema, createEntrySchema } from './inventory.js';
 import { periodSchema } from './reports.js';
+import { parseScaleLabel, scaleQuantity } from './store.js';
 
 describe('parseBrlToCents', () => {
   it.each([
@@ -101,5 +102,35 @@ describe('contratos de relatórios', () => {
   it('rejeita data inválida', () => {
     expect(periodSchema.safeParse({ from: '2026-02-30', to: '2026-03-01' }).success).toBe(false);
     expect(periodSchema.safeParse({ from: '10/10/2026', to: '2026-10-10' }).success).toBe(false);
+  });
+});
+
+describe('etiqueta de balança (ADR 0020)', () => {
+  // 2 | 000123 | 01235 | DV: produto 000123, valor 01235
+  const label = (body: string) => {
+    const sum = [...body].reverse().reduce((acc, d, i) => acc + Number(d) * (i % 2 === 0 ? 3 : 1), 0);
+    return body + ((10 - (sum % 10)) % 10);
+  };
+
+  it('lê código e valor; recusa prefixo diferente de 2 e dígito verificador errado', () => {
+    const code = label('200012301235');
+    expect(parseScaleLabel(code)).toEqual({ scaleCode: '000123', value: 1235 });
+    expect(parseScaleLabel('7' + code.slice(1))).toBeNull();
+    expect(parseScaleLabel(code.slice(0, 12) + ((Number(code[12]) + 1) % 10))).toBeNull();
+    expect(parseScaleLabel('2000123')).toBeNull();
+  });
+
+  it('peso em gramas vira kg exato; preço vira kg pelo preço por quilo', () => {
+    const l = { scaleCode: '000123', value: 1235 };
+    expect(scaleQuantity(l, 'WEIGHT', 699)).toBe(1.235);
+    // R$ 12,35 de banana a R$ 6,99/kg = 1,7668... kg → 1,767 kg
+    expect(scaleQuantity(l, 'PRICE', 699)).toBe(1.767);
+  });
+
+  it('código de balança: até 6 dígitos, completado com zeros; só para KG', () => {
+    const base = { sku: 'BAN', name: 'Banana', unit: 'KG', salePriceCents: 699 };
+    expect(createProductSchema.parse({ ...base, scaleCode: '42' }).scaleCode).toBe('000042');
+    expect(createProductSchema.parse({ ...base, scaleCode: '' }).scaleCode).toBeNull();
+    expect(createProductSchema.safeParse({ ...base, unit: 'UN', scaleCode: '42' }).success).toBe(false);
   });
 });

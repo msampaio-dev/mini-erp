@@ -802,3 +802,84 @@ ul.plain-list {
   display: grid;
   gap: 10px;
 }
+
+/* ─── Cupom 80 mm (ADR 0020) ─── */
+/* O tamanho da página (@page) é injetado pela própria tela do cupom: as outras seguem no A4. */
+.cupom {
+  width: 72mm; /* área útil de uma bobina de 80 mm */
+  margin: 16px auto;
+  padding: 4mm;
+  background: #fff;
+  color: #000;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  border: 1px dashed var(--border);
+}
+
+.cupom header {
+  text-align: center;
+  border-bottom: 1px dashed #000;
+  padding-bottom: 6px;
+}
+
+.cupom-center {
+  text-align: center;
+}
+
+.cupom table {
+  width: 100%;
+  border-collapse: collapse;
+  border-top: 1px dashed #000;
+  border-bottom: 1px dashed #000;
+}
+
+.cupom table,
+.cupom td {
+  font: inherit;
+}
+
+.cupom td {
+  padding: 3px 0;
+  vertical-align: top;
+  border: 0;
+  background: none;
+  color: #000;
+}
+
+.cupom dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  margin: 6px 0;
+}
+
+.cupom dd {
+  margin: 0;
+  text-align: right;
+}
+
+.cupom .cupom-total {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+@media print {
+  .topbar,
+  .no-print {
+    display: none !important;
+  }
+
+  /* :root, e não html: a cor de fundo do tema está em :root, que tem especificidade maior. */
+  :root,
+  body,
+  main.page {
+    background: #fff;
+    margin: 0;
+    padding: 0;
+  }
+
+  .cupom {
+    margin: 0;
+    border: 0;
+  }
+}

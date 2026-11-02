@@ -14,12 +14,17 @@ export async function login(page: Page, email = ADMIN_EMAIL, password = ADMIN_PA
 /** Sufixo único: cada teste cria os próprios dados e não depende da ordem de execução. */
 export const unique = (prefix: string) => `${prefix}-${Date.now().toString(36).toUpperCase()}${randomInt(1000)}`;
 
-/** EAN-13 de uso interno (prefixo 2) com dígito verificador válido. */
-export function randomEan(): string {
-  const body = `2${String(randomInt(10 ** 11)).padStart(11, '0')}`;
+/** Completa 12 dígitos com o dígito verificador do EAN-13. */
+const withCheckDigit = (body: string) => {
   const sum = [...body].reverse().reduce((acc, d, i) => acc + Number(d) * (i % 2 === 0 ? 3 : 1), 0);
   return body + ((10 - (sum % 10)) % 10);
-}
+};
+
+/** EAN-13 de uso interno (prefixo 2) com dígito verificador válido. */
+export const randomEan = () => withCheckDigit(`2${String(randomInt(10 ** 11)).padStart(11, '0')}`);
+
+/** Etiqueta de balança: 2 + código (6) + valor (5) + verificador (ADR 0020). */
+export const scaleLabel = (body12: string) => withCheckDigit(body12);
 
 /** Valor em reais como o Intl formata (o espaço após "R$" é um NBSP: \s cobre os dois). */
 export const brl = (text: string) => new RegExp(`R\\$\\s${text.replace('.', '\\.')}`);

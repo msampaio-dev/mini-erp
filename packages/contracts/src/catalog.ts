@@ -52,6 +52,12 @@ export const skuSchema = z
   .toUpperCase()
   .regex(/^[A-Z0-9][A-Z0-9._-]{0,39}$/, 'SKU: até 40 caracteres (letras, números, - _ .)');
 
+export const scaleCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{1,6}$/, 'Código da balança: até 6 dígitos')
+  .transform((v) => v.padStart(6, '0'));
+
 export const barcodeSchema = z
   .string()
   .trim()
@@ -64,6 +70,8 @@ const productFields = z.object({
   unit: z.enum(UNIT_KEYS),
   // '' vindo de um input vazio vira null: "sem código de barras".
   barcode: z.preprocess((v) => (v === '' ? null : v), barcodeSchema.nullable()).default(null),
+  /** Código do produto na balança (ADR 0020): até 6 dígitos, guardado com zeros à esquerda. */
+  scaleCode: z.preprocess((v) => (v === '' ? null : v), scaleCodeSchema.nullable()).default(null),
   categoryId: z.preprocess((v) => (v === '' ? null : v), z.uuid().nullable()).default(null),
   salePriceCents: centsSchema,
   minStock: quantitySchema.default(0),
@@ -76,8 +84,14 @@ const minStockIssue = {
   message: 'Esta unidade não aceita quantidade fracionada',
   path: ['minStock'],
 };
+/** Balança pesa: código de balança só em produto vendido por KG. */
+const scaleCodeMatchesUnit = <T extends { unit: Unit; scaleCode: string | null }>(p: T) =>
+  p.scaleCode === null || p.unit === 'KG';
+const scaleCodeIssue = { message: 'Código de balança só para produto vendido por KG', path: ['scaleCode'] };
 
-export const createProductSchema = productFields.refine(minStockMatchesUnit, minStockIssue);
+export const createProductSchema = productFields
+  .refine(minStockMatchesUnit, minStockIssue)
+  .refine(scaleCodeMatchesUnit, scaleCodeIssue);
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 
 /**
@@ -85,7 +99,8 @@ export type CreateProductInput = z.infer<typeof createProductSchema>;
  */
 export const updateProductSchema = productFields
   .extend({ version: z.number().int().min(1) })
-  .refine(minStockMatchesUnit, minStockIssue);
+  .refine(minStockMatchesUnit, minStockIssue)
+  .refine(scaleCodeMatchesUnit, scaleCodeIssue);
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 
 export const productSchema = z.object({
@@ -95,6 +110,7 @@ export const productSchema = z.object({
   description: z.string(),
   unit: z.enum(UNIT_KEYS),
   barcode: z.string().nullable(),
+  scaleCode: z.string().nullable(),
   category: categorySchema.nullable(),
   salePriceCents: centsSchema,
   minStock: z.number(),
@@ -109,6 +125,8 @@ export const productListQuerySchema = pageQuerySchema.extend({
   q: z.string().trim().max(100).optional(),
   status: z.enum([...PRODUCT_STATUSES, 'ALL']).default('ACTIVE'),
   categoryId: z.uuid().optional(),
+  /** Busca exata pelo código da balança (leitura de etiqueta no PDV). */
+  scaleCode: scaleCodeSchema.optional(),
 });
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
 

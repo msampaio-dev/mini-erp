@@ -152,6 +152,8 @@ model Product {
   unit           Unit
   /// GTIN/EAN opcional. UNIQUE permite vários NULL no Postgres.
   barcode        String?       @unique
+  /// Código do produto na balança (ADR 0020): 6 dígitos, lido da etiqueta 2CCCCCCVVVVVD.
+  scaleCode      String?       @unique @map("scale_code")
   categoryId     String?       @map("category_id") @db.Uuid
   salePriceCents Int           @map("sale_price_cents")
   /// Até 3 casas decimais (unidades fracionáveis: KG, L, M).

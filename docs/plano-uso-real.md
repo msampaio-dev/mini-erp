@@ -55,9 +55,9 @@ Em ordem de prioridade para um mercado:
    Primeiro registramos o que a maquininha aprovou; integração TEF fica para depois.
 3. ✅ **Devolução parcial** (ADR 0019; a troca é devolução + venda nova): hoje só existe cancelamento da venda inteira. A devolução
    gera entrada no livro-razão, como o estorno já faz.
-4. **Impressão do cupom** em impressora térmica de 80 mm (página de impressão do navegador, sem
+4. ✅ **Impressão do cupom** (ADR 0020) em impressora térmica de 80 mm (página de impressão do navegador, sem
    driver especial).
-5. **Produtos pesáveis:** etiqueta de balança (EAN-13 começando com 2, com peso ou preço dentro
+5. ✅ **Produtos pesáveis** (ADR 0020): etiqueta de balança (EAN-13 começando com 2, com peso ou preço dentro
    do código). A unidade fracionada (KG) já existe no estoque.
 6. **Fornecedores e pedidos de compra:** a entrada de estoque passa a referenciar o pedido.
 7. **Clientes** (opcional): CPF na nota. Isso traz obrigações da **LGPD** (finalidade, retenção,

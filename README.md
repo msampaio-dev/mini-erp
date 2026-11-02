@@ -91,4 +91,5 @@ push. O `.github/workflows/backup.yml` faz o backup diário da produção, cript
 - [x] Backup diário da produção, criptografado e com teste de restauração (ADR 0017)
 - [x] Caixa com abertura, sangria, suprimento e fechamento cego; pagamento dividido (ADR 0018)
 - [x] Devolução parcial com reembolso proporcional, estoque de volta e relatórios na data da devolução (ADR 0019)
+- [x] Cupom para impressora térmica de 80 mm e leitura de etiqueta de balança (ADR 0020)
 - [ ] Migrar para o Prisma 8 quando sair a versão estável

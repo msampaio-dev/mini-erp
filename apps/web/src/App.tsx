@@ -12,6 +12,7 @@ import { CategoriesPage } from './pages/products/CategoriesPage.tsx'
 import { ProductFormPage } from './pages/products/ProductFormPage.tsx'
 import { ProductListPage } from './pages/products/ProductListPage.tsx'
 import { PosPage } from './pages/sales/PosPage.tsx'
+import { ReceiptPage } from './pages/sales/ReceiptPage.tsx'
 import { SaleDetailPage } from './pages/sales/SaleDetailPage.tsx'
 import { SalesListPage } from './pages/sales/SalesListPage.tsx'
 import { StockPage } from './pages/stock/StockPage.tsx'
@@ -89,6 +90,14 @@ export default function App() {
           element={
             <RequirePermission permission="vendas:ler">
               <SaleDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="vendas/:id/cupom"
+          element={
+            <RequirePermission permission="vendas:ler">
+              <ReceiptPage />
             </RequirePermission>
           }
         />

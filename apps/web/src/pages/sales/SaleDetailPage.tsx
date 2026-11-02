@@ -41,6 +41,9 @@ function SaleDetail({ sale }: { sale: Sale }) {
         <h1>Venda nº {sale.number}</h1>
         <div className="actions">
           <SaleStatusBadge status={sale.status} />
+          <Link to={`/vendas/${sale.id}/cupom`} className="button secondary small">
+            Cupom
+          </Link>
           {can('vendas:devolver') && hasReturnable(sale) && !returning && !canceling && (
             <button type="button" className="secondary small" onClick={() => setReturning(true)}>
               Registrar devolução

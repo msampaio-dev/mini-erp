@@ -68,6 +68,15 @@ Um valor errado permite forjar o IP e escapar do limite de tentativas de login.
    Com 1, o rate limit de login simplesmente não funcionava (ADR 0015).
 3. Volte `DIAGNOSTICS=false`.
 
+## Dados da loja e balança (opcional)
+
+No painel do Render, em **Environment**, você pode definir (ADR 0020):
+
+| Variável | Para quê |
+|---|---|
+| `STORE_NAME`, `STORE_DOCUMENT`, `STORE_ADDRESS` | Nome, CNPJ e endereço no cupom |
+| `SCALE_LABEL_MODE` | `WEIGHT` (padrão) se a balança imprime o peso; `PRICE` se imprime o preço |
+
 ## Dia a dia
 
 - **Atualizar:** é só dar push na `main`. O Render publica **depois que o CI passar**

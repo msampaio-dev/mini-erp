@@ -7,8 +7,10 @@ import {
   formatCents,
   isFractionalUnit,
   parseBrlToCents,
+  parseScaleLabel,
   PAYMENT_METHODS,
   productPageSchema,
+  scaleQuantity,
   settlePayments,
   type PaymentMethod,
   type Product,
@@ -17,6 +19,7 @@ import {
 } from '@mini-erp/contracts'
 import { apiGet, toQueryString } from '../../lib/api.ts'
 import { useCurrentCash } from '../../lib/cash-queries.ts'
+import { useStoreSettings } from '../../lib/store-queries.ts'
 import { useBalances } from '../../lib/inventory-queries.ts'
 import { formatQuantity, parseQuantity } from '../../lib/quantity.ts'
 import { useCreateSale } from '../../lib/sales-queries.ts'
@@ -69,17 +72,20 @@ function Pos() {
 
   const [key, renewKey] = useIdempotencyKey()
   const createSale = useCreateSale()
+  const settings = useStoreSettings()
   const { data: balances } = useBalances(cart.map((l) => l.product.id))
   const available = new Map(balances?.map((b) => [b.productId, b.quantity]))
 
-  function addProduct(product: Product) {
+  /** Soma em milésimos inteiros: 0,1 + 0,2 em float daria 0,30000000000000004. */
+  const toText = (milli: number) => String(milli / 1000).replace('.', ',')
+
+  function addProduct(product: Product, amount = 1) {
     setCart((current) => {
       const existing = current.find((l) => l.product.id === product.id)
-      if (!existing) return [...current, { product, quantity: '1' }]
-      // Leu o mesmo código de novo: soma 1, como no caixa de supermercado.
-      return current.map((l) =>
-        l === existing ? { ...l, quantity: String((parseQuantity(l.quantity) ?? 0) + 1).replace('.', ',') } : l,
-      )
+      if (!existing) return [...current, { product, quantity: toText(Math.round(amount * 1000)) }]
+      // Leu o mesmo código de novo: soma, como no caixa de supermercado (duas etiquetas de banana viram uma linha).
+      const milli = Math.round((parseQuantity(existing.quantity) ?? 0) * 1000) + Math.round(amount * 1000)
+      return current.map((l) => (l === existing ? { ...l, quantity: toText(milli) } : l))
     })
     setResults(null)
     searchRef.current?.focus()
@@ -99,8 +105,18 @@ function Pos() {
       const page = await apiGet(`/products${toQueryString({ q: term, pageSize: 10 })}`, productPageSchema)
       // Leitor de código de barras: correspondência exata entra direto no carrinho.
       const exact = page.items.find((p) => p.barcode === term || p.sku === term.toUpperCase())
-      if (exact) addProduct(exact)
-      else if (page.items.length === 1) addProduct(page.items[0]!)
+      if (exact) return addProduct(exact)
+      // Etiqueta de balança (ADR 0020): 2 + código do produto + peso (ou preço) + verificador.
+      const label = parseScaleLabel(term)
+      if (label && settings.data) {
+        const byCode = await apiGet(`/products${toQueryString({ scaleCode: label.scaleCode, pageSize: 1 })}`, productPageSchema)
+        const product = byCode.items[0]
+        if (!product) return setSearchError(`Etiqueta de balança: nenhum produto com o código ${label.scaleCode}`)
+        const qty = scaleQuantity(label, settings.data.scaleLabelMode, product.salePriceCents)
+        if (qty <= 0) return setSearchError('Etiqueta de balança com peso zerado')
+        return addProduct(product, qty)
+      }
+      if (page.items.length === 1) addProduct(page.items[0]!)
       else if (page.items.length === 0) setSearchError(`Nenhum produto encontrado para "${term}"`)
       else setResults(page.items)
     } catch (err) {
@@ -206,6 +222,9 @@ function Pos() {
         <div className="actions">
           <Link to={`/vendas/${done.id}`} className="button secondary">
             Ver venda
+          </Link>
+          <Link to={`/vendas/${done.id}/cupom?imprimir=1`} className="button secondary">
+            Imprimir cupom
           </Link>
           <button type="button" autoFocus onClick={newSale}>
             Nova venda

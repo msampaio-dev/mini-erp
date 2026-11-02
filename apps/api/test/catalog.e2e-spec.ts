@@ -1,3 +1,4 @@
+import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
 import type { Product } from '@mini-erp/contracts';
 import type TestAgent from 'supertest/lib/agent.js';
@@ -75,6 +76,34 @@ describe('Catálogo (e2e)', () => {
       await createProduct({ barcode: null });
       await createProduct({ sku: 'OUTRO', barcode: null });
     });
+  });
+
+  describe('código de balança (ADR 0020)', () => {
+    const banana = { sku: 'BAN', name: 'Banana prata', unit: 'KG', salePriceCents: 699 };
+
+    it('guarda com 6 dígitos, busca exata pelo código e recusa duplicado', async () => {
+      const res = await gerente.post('/api/products').send({ ...banana, scaleCode: '123' }).expect(201);
+      expect(res.body.scaleCode).toBe('000123');
+
+      const found = await gerente.get('/api/products').query({ scaleCode: '123' }).expect(200);
+      expect(found.body.items.map((p: { sku: string }) => p.sku)).toEqual(['BAN']);
+
+      const dup = await gerente.post('/api/products').send({ ...banana, sku: 'BAN2', scaleCode: '000123' }).expect(409);
+      expect(dup.body.message).toMatch(/código de balança/);
+    });
+
+    it('só em produto vendido por KG; formato validado', async () => {
+      const un = await gerente.post('/api/products').send({ ...caneta, scaleCode: '5' }).expect(400);
+      expect(un.body.errors[0]).toMatchObject({ path: 'scaleCode' });
+      await gerente.post('/api/products').send({ ...banana, scaleCode: '1234567' }).expect(400);
+      await gerente.post('/api/products').send({ ...banana, scaleCode: '12a' }).expect(400);
+    });
+  });
+
+  it('configurações da loja: qualquer usuário logado lê; sem login, não', async () => {
+    const res = await gerente.get('/api/store/settings').expect(200);
+    expect(res.body).toEqual({ name: 'Mini-ERP', document: '', address: '', scaleLabelMode: 'WEIGHT' });
+    await request(app.getHttpServer()).get('/api/store/settings').expect(401);
   });
 
   describe('permissões', () => {

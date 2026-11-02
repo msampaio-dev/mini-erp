@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { randomUUID } from 'node:crypto';
-import { apiBalance, apiCreateProduct, apiEnsureCash, apiStockIn, brl, login } from './support/helpers.ts';
+import { randomInt, randomUUID } from 'node:crypto';
+import { apiBalance, apiCreateProduct, apiEnsureCash, apiStockIn, brl, login, scaleLabel } from './support/helpers.ts';
 
 test.describe('Estoque e vendas', () => {
   test.beforeEach(async ({ page }) => {
@@ -116,5 +116,35 @@ test.describe('Estoque e vendas', () => {
     await expect(page.getByRole('listitem').filter({ hasText: 'Embalagem violada' })).toContainText(brl('9,00'));
     await expect(page.getByRole('button', { name: 'Cancelar venda' })).toHaveCount(0);
     expect(await apiBalance(page, product.id)).toBe(8);
+  });
+
+  test('etiqueta de balança: o PDV lê o peso da etiqueta e soma duas etiquetas do mesmo produto; cupom sem valor fiscal', async ({
+    page,
+  }) => {
+    const scaleCode = String(randomInt(1, 999_999)).padStart(6, '0');
+    const product = await apiCreateProduct(page, { unit: 'KG', salePriceCents: 699, barcode: null, scaleCode });
+    await apiStockIn(page, product.id, 20);
+    await page.goto('/vendas/nova');
+
+    // Etiquetas de 1,235 kg e 0,500 kg (balança configurada para imprimir o PESO).
+    const scanner = page.getByRole('searchbox', { name: 'Adicionar produto' });
+    for (const grams of ['01235', '00500']) {
+      await scanner.fill(scaleLabel(`2${scaleCode}${grams}`));
+      await scanner.press('Enter');
+      await expect(page.getByRole('alert')).toHaveCount(0);
+    }
+    await expect(page.getByLabel(`Quantidade de ${product.name}`)).toHaveValue('1,735');
+    // 1,735 kg × R$ 6,99 = R$ 12,13 (12,12765 arredondado)
+    await expect(page.locator('dd.grand')).toHaveText(brl('12,13'));
+
+    await page.getByRole('button', { name: 'Finalizar venda' }).click();
+    await expect(page.getByRole('heading', { name: /Venda nº \d+ registrada/ })).toBeVisible();
+    await page.getByRole('link', { name: 'Ver venda' }).click();
+    await page.getByRole('link', { name: 'Cupom' }).click();
+
+    const cupom = page.getByRole('article', { name: /Cupom da venda/ });
+    await expect(cupom).toContainText('DOCUMENTO SEM VALOR FISCAL');
+    await expect(cupom).toContainText(product.name);
+    await expect(cupom).toContainText(/1,735 KG × R\$\s6,99/);
   });
 });

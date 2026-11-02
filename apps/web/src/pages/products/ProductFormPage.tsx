@@ -28,6 +28,7 @@ interface FormValues {
   description: string
   unit: Unit
   barcode: string
+  scaleCode: string
   categoryId: string
   price: string
   minStock: string
@@ -41,6 +42,7 @@ const EMPTY: FormValues = {
   description: '',
   unit: 'UN',
   barcode: '',
+  scaleCode: '',
   categoryId: '',
   price: '',
   minStock: '0',
@@ -53,6 +55,7 @@ function toFormValues(p: Product): FormValues {
     description: p.description,
     unit: p.unit,
     barcode: p.barcode ?? '',
+    scaleCode: p.scaleCode ?? '',
     categoryId: p.category?.id ?? '',
     price: centsToInput(p.salePriceCents),
     minStock: String(p.minStock).replace('.', ','),
@@ -118,6 +121,8 @@ function ProductForm({ product, onReload }: { product?: Product; onReload?: () =
       description: values.description,
       unit: values.unit,
       barcode: values.barcode,
+      // Código de balança só vale para KG: trocar a unidade descarta o código digitado.
+      scaleCode: values.unit === 'KG' ? values.scaleCode : '',
       categoryId: values.categoryId,
       salePriceCents,
       minStock: Number(values.minStock.replace(',', '.')),
@@ -230,6 +235,17 @@ function ProductForm({ product, onReload }: { product?: Product; onReload?: () =
             className="mono"
           />
         </Field>
+        {values.unit === 'KG' && (
+          <Field label="Código na balança (até 6 dígitos)" error={errors.scaleCode}>
+            <input
+              inputMode="numeric"
+              value={values.scaleCode}
+              onChange={(e) => set('scaleCode')(e.target.value)}
+              disabled={disabled}
+              className="mono"
+            />
+          </Field>
+        )}
         <Field label="Preço de venda (R$)" error={errors.price}>
           <input
             inputMode="decimal"

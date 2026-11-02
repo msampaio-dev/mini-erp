@@ -26,6 +26,12 @@ export const envSchema = z.object({
    * também serve o front, na MESMA origem (cookies de sessão simples, sem CORS).
    */
   WEB_DIST_DIR: z.string().min(1).optional(),
+  /** Dados da loja no cupom (ADR 0020). O cupom é "sem valor fiscal" enquanto não houver NFC-e. */
+  STORE_NAME: z.string().trim().min(1).default('Mini-ERP'),
+  STORE_DOCUMENT: z.string().trim().default(''),
+  STORE_ADDRESS: z.string().trim().default(''),
+  /** O que a balança imprime na etiqueta: peso em gramas (recomendado) ou preço total. */
+  SCALE_LABEL_MODE: z.enum(['WEIGHT', 'PRICE']).default('WEIGHT'),
   /** Liga GET /api/health/client-ip, para descobrir o TRUST_PROXY certo num provedor novo. */
   DIAGNOSTICS: z
     .enum(['true', 'false'])

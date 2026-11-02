@@ -33,6 +33,7 @@ const toProduct = (row: ProductRow): Product => ({
   description: row.description,
   unit: row.unit,
   barcode: row.barcode,
+  scaleCode: row.scaleCode,
   category: row.category,
   salePriceCents: row.salePriceCents,
   minStock: row.minStock.toNumber(),
@@ -46,6 +47,7 @@ const toProduct = (row: ProductRow): Product => ({
 function mapWriteError(err: unknown): never {
   const target = uniqueViolationTarget(err);
   if (target?.includes('barcode')) throw new ConflictException('Já existe um produto com este código de barras');
+  if (target?.includes('scale_code')) throw new ConflictException('Já existe um produto com este código de balança');
   if (target !== null) throw new ConflictException('Já existe um produto com este SKU');
   if (isForeignKeyViolation(err)) throw new BadRequestException('Categoria não encontrada');
   // Recusa do trigger products_unit_guard (ADR 0014): a regra cruza Catálogo e Estoque.
@@ -67,6 +69,7 @@ export class ProductsService {
     const where: Prisma.ProductWhereInput = {
       ...(query.status !== 'ALL' && { status: query.status }),
       ...(query.categoryId && { categoryId: query.categoryId }),
+      ...(query.scaleCode && { scaleCode: query.scaleCode }),
       // ILIKE '%termo%': acelerado pelos índices trigram (pg_trgm) de name e sku.
       ...(query.q && {
         OR: [

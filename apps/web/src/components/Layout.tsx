@@ -17,6 +17,7 @@ export function Layout() {
             </NavLink>
           )}
           {can('produtos:ler') && <NavLink to="/produtos">Produtos</NavLink>}
+          {can('fornecedores:ler') && <NavLink to="/fornecedores">Fornecedores</NavLink>}
           {can('relatorios:ler') && <NavLink to="/relatorios">Relatórios</NavLink>}
           {can('usuarios:gerenciar') && <NavLink to="/usuarios">Usuários</NavLink>}
           <NavLink to="/meu-acesso">Meu acesso</NavLink>

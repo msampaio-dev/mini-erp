@@ -15,6 +15,8 @@ export const PERMISSIONS = {
   'vendas:cancelar': 'Cancelar vendas',
   'vendas:devolver': 'Registrar devolução de itens vendidos',
   'relatorios:ler': 'Acessar relatórios',
+  'fornecedores:ler': 'Consultar fornecedores (para registrar entradas)',
+  'fornecedores:gerenciar': 'Cadastrar e editar fornecedores',
   'caixa:operar': 'Abrir, movimentar e fechar o próprio caixa',
   'caixa:gerenciar': 'Ver todos os caixas, com valores esperados e diferenças',
 } as const;

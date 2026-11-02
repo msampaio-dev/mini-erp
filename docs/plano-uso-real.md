@@ -59,9 +59,10 @@ Em ordem de prioridade para um mercado:
    driver especial).
 5. ✅ **Produtos pesáveis** (ADR 0020): etiqueta de balança (EAN-13 começando com 2, com peso ou preço dentro
    do código). A unidade fracionada (KG) já existe no estoque.
-6. **Fornecedores e pedidos de compra:** a entrada de estoque passa a referenciar o pedido.
-7. **Clientes** (opcional): CPF na nota. Isso traz obrigações da **LGPD** (finalidade, retenção,
-   acesso restrito).
+6. ✅ **Fornecedores** (ADR 0021): a entrada de estoque aponta para o fornecedor e para a nota.
+   O **pedido de compra** fica para quando houver compras recorrentes planejadas.
+7. **Clientes**: movido para a fase fiscal (CPF na nota). Traz obrigações da **LGPD** (finalidade,
+   retenção, acesso restrito).
 
 ## 3. Infraestrutura
 

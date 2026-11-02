@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { centsSchema } from './money.js';
 import { pageQuerySchema, pageSchema } from './pagination.js';
+import { supplierRefSchema } from './suppliers.js';
 
 /** Cabeçalho que torna as escritas de estoque idempotentes (ADR 0010). */
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
@@ -41,6 +42,9 @@ export const createEntrySchema = z.object({
   quantity: signedQuantitySchema.refine((n) => n > 0, 'A quantidade da entrada deve ser positiva'),
   /** Custo unitário de compra, em centavos: alimenta o custo médio (ADR 0010). */
   unitCostCents: centsSchema,
+  /** De quem veio e com qual nota fiscal (ADR 0021). Opcionais: nem toda entrada tem fornecedor. */
+  supplierId: z.preprocess((v) => (v === '' ? null : v), z.uuid().nullable()).default(null),
+  invoiceNumber: z.string().trim().max(60).default(''),
   note: noteSchema,
 });
 export type CreateEntryInput = z.infer<typeof createEntrySchema>;
@@ -72,6 +76,8 @@ export const movementSchema = z.object({
   unitCostCents: z.number().int().nullable(),
   reason: z.enum(ADJUSTMENT_REASON_KEYS).nullable(),
   note: z.string(),
+  supplier: supplierRefSchema.nullable(),
+  invoiceNumber: z.string(),
   /** Saldo do produto logo após esta movimentação (coluna "saldo" do kardex). */
   balanceAfter: z.number(),
   reversalOfId: z.uuid().nullable(),

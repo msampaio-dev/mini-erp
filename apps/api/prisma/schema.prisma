@@ -208,8 +208,12 @@ model StockMovement {
   createdById    String       @map("created_by_id") @db.Uuid
   /// Chave de idempotência enviada pelo cliente (único por usuário).
   idempotencyKey String?      @map("idempotency_key") @db.Uuid
+  /// Entrada de compra: de quem veio e com qual nota fiscal (ADR 0021).
+  supplierId     String?      @map("supplier_id") @db.Uuid
+  invoiceNumber  String       @default("") @map("invoice_number")
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
 
+  supplier   Supplier?      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   product    Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
   createdBy  User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
   reversalOf StockMovement? @relation("Reversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
@@ -219,7 +223,27 @@ model StockMovement {
 
   @@unique([createdById, idempotencyKey], map: "stock_movements_idempotency_key")
   @@index([productId, createdAt(sort: Desc)])
+  @@index([supplierId, createdAt(sort: Desc)])
   @@map("stock_movements")
+}
+
+/// Fornecedor (ADR 0021). Desativar em vez de apagar: as entradas antigas continuam apontando para ele.
+model Supplier {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String
+  /// CNPJ (14) ou CPF (11), só dígitos. Único quando informado.
+  document  String?  @unique
+  phone     String   @default("")
+  email     String   @default("")
+  note      String   @default("")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  entries StockMovement[]
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "suppliers_name_trgm_idx")
+  @@map("suppliers")
 }
 
 /// Saldo atual por produto: cache consistente do ledger, atualizado na mesma transação.

@@ -113,7 +113,9 @@ function Stock({ product }: { product: Product }) {
                     <td className="num">{m.unitCostCents === null ? '—' : formatCents(m.unitCostCents)}</td>
                     <td className="num">{formatQuantity(m.balanceAfter)}</td>
                     <td>{m.createdBy.name}</td>
-                    <td className="note">{m.note || '—'}</td>
+                    <td className="note">
+                      {[m.supplier?.name, m.invoiceNumber, m.note].filter(Boolean).join(' · ') || '—'}
+                    </td>
                     <td>
                       {can('estoque:ajustar') && !m.reversedById && (m.type === 'ENTRY' || m.type === 'ADJUSTMENT') && (
                         <button type="button" className="secondary small" onClick={() => setReversing(m)}>

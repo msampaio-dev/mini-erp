@@ -5,6 +5,7 @@ import { centsToInput, parseBrlToCents } from './money.js';
 import { balancesQuerySchema, createAdjustmentSchema, createEntrySchema } from './inventory.js';
 import { periodSchema } from './reports.js';
 import { parseScaleLabel, scaleQuantity } from './store.js';
+import { documentSchema, formatDocument, isValidCnpj, isValidCpf } from './suppliers.js';
 
 describe('parseBrlToCents', () => {
   it.each([
@@ -134,3 +135,21 @@ describe('etiqueta de balança (ADR 0020)', () => {
     expect(createProductSchema.safeParse({ ...base, unit: 'UN', scaleCode: '42' }).success).toBe(false);
   });
 });
+
+describe('CNPJ e CPF (ADR 0021)', () => {
+  it('valida pelos dígitos verificadores e recusa sequências repetidas', () => {
+    expect(isValidCnpj('11222333000181')).toBe(true);
+    expect(isValidCnpj('11222333000182')).toBe(false);
+    expect(isValidCnpj('00000000000000')).toBe(false);
+    expect(isValidCpf('52998224725')).toBe(true);
+    expect(isValidCpf('52998224726')).toBe(false);
+    expect(isValidCpf('11111111111')).toBe(false);
+  });
+
+  it('o schema tira a máscara; a tela formata de volta', () => {
+    expect(documentSchema.parse('11.222.333/0001-81')).toBe('11222333000181');
+    expect(formatDocument('11222333000181')).toBe('11.222.333/0001-81');
+    expect(formatDocument('52998224725')).toBe('529.982.247-25');
+  });
+});
+

@@ -8,8 +8,10 @@ import {
   type AdjustmentReason,
   type Product,
 } from '@mini-erp/contracts'
+import { useAuth } from '../../auth/auth-context.ts'
 import { ApiError } from '../../lib/api.ts'
 import { useRegisterAdjustment, useRegisterEntry } from '../../lib/inventory-queries.ts'
+import { useSuppliers } from '../../lib/suppliers-queries.ts'
 import { parseQuantity } from '../../lib/quantity.ts'
 import { useIdempotencyKey } from '../../lib/use-idempotency-key.ts'
 
@@ -32,9 +34,14 @@ export function EntryForm({ product, onDone }: FormProps) {
   const register = useRegisterEntry()
   const [quantity, setQuantity] = useState('')
   const [cost, setCost] = useState('')
+  const [supplierId, setSupplierId] = useState('')
+  const [invoiceNumber, setInvoiceNumber] = useState('')
   const [note, setNote] = useState('')
   const [errors, setErrors] = useState<Errors>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const { can } = useAuth()
+  // Lista dos ativos para escolher; um mercado pequeno tem dezenas, não milhares (ADR 0021).
+  const suppliers = useSuppliers('', 'true', 1, can('fornecedores:ler'))
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -48,7 +55,14 @@ export function EntryForm({ product, onDone }: FormProps) {
       })
       return
     }
-    const parsed = createEntrySchema.safeParse({ productId: product.id, quantity: qty, unitCostCents, note })
+    const parsed = createEntrySchema.safeParse({
+      productId: product.id,
+      quantity: qty,
+      unitCostCents,
+      supplierId,
+      invoiceNumber,
+      note,
+    })
     if (!parsed.success) {
       setErrors(Object.fromEntries(parsed.error.issues.map((i) => [String(i.path[0]), i.message])))
       return
@@ -82,8 +96,26 @@ export function EntryForm({ product, onDone }: FormProps) {
         <input inputMode="decimal" placeholder="2,50" value={cost} onChange={(e) => setCost(e.target.value)} />
         {errors.unitCostCents && <span className="field-error">{errors.unitCostCents}</span>}
       </label>
+      {suppliers.data && (
+        <label>
+          Fornecedor
+          <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+            <option value="">Sem fornecedor</option>
+            {suppliers.data.items.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {errors.supplierId && <span className="field-error">{errors.supplierId}</span>}
+        </label>
+      )}
+      <label>
+        Nota fiscal do fornecedor
+        <input value={invoiceNumber} placeholder="NF 4471" onChange={(e) => setInvoiceNumber(e.target.value)} />
+      </label>
       <label className="wide">
-        Observação (nota fiscal, fornecedor…)
+        Observação
         <input value={note} onChange={(e) => setNote(e.target.value)} />
         {errors.note && <span className="field-error">{errors.note}</span>}
       </label>

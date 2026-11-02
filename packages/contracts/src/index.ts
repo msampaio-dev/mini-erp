@@ -11,4 +11,5 @@ export * from './sale-math.js';
 export * from './sales.js';
 export * from './cash.js';
 export * from './store.js';
+export * from './suppliers.js';
 export * from './reports.js';

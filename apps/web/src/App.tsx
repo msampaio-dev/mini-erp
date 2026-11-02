@@ -16,6 +16,7 @@ import { ReceiptPage } from './pages/sales/ReceiptPage.tsx'
 import { SaleDetailPage } from './pages/sales/SaleDetailPage.tsx'
 import { SalesListPage } from './pages/sales/SalesListPage.tsx'
 import { StockPage } from './pages/stock/StockPage.tsx'
+import { SuppliersPage } from './pages/suppliers/SuppliersPage.tsx'
 import { UsersPage } from './pages/users/UsersPage.tsx'
 
 export default function App() {
@@ -122,6 +123,14 @@ export default function App() {
           element={
             <RequirePermission permission="caixa:operar">
               <CashDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="fornecedores"
+          element={
+            <RequirePermission permission="fornecedores:ler">
+              <SuppliersPage />
             </RequirePermission>
           }
         />

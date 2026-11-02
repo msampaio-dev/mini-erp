@@ -27,7 +27,7 @@ export const ROLE_DEFINITIONS: Record<RoleKey, RoleDefinition> = {
   ESTOQUISTA: {
     name: 'Estoquista',
     description: 'Recebe mercadoria e consulta estoque',
-    permissions: ['produtos:ler', 'estoque:ler', 'estoque:entrada'],
+    permissions: ['produtos:ler', 'estoque:ler', 'estoque:entrada', 'fornecedores:ler'],
   },
 };
 

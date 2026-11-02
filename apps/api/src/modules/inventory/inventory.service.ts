@@ -21,6 +21,7 @@ import { uniqueViolationTarget } from '../../common/prisma-errors.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { ProductsService } from '../catalog/products/products.service.js';
+import { SuppliersService } from '../suppliers/suppliers.service.js';
 import * as ledger from './stock-ledger.js';
 
 export interface MovementResult {
@@ -40,6 +41,7 @@ interface Fingerprint {
 const movementInclude = {
   createdBy: { select: { id: true, name: true } },
   reversedBy: { select: { id: true } },
+  supplier: { select: { id: true, name: true } },
 } satisfies Prisma.StockMovementInclude;
 
 type MovementRow = Prisma.StockMovementGetPayload<{ include: typeof movementInclude }>;
@@ -52,6 +54,8 @@ const toMovement = (row: MovementRow): Movement => ({
   unitCostCents: row.unitCostCents,
   reason: row.reason as Movement['reason'],
   note: row.note,
+  supplier: row.supplier,
+  invoiceNumber: row.invoiceNumber,
   balanceAfter: row.balanceAfter.toNumber(),
   reversalOfId: row.reversalOfId,
   reversedById: row.reversedBy?.id ?? null,
@@ -75,6 +79,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly products: ProductsService,
+    private readonly suppliers: SuppliersService,
   ) {}
 
   // ─── Escritas ────────────────────────────────────────────────────────────
@@ -84,6 +89,7 @@ export class InventoryService {
 
     return this.idempotent(userId, key, fp, async () => {
       await this.assertMovable(input.productId, input.quantity);
+      if (input.supplierId) await this.suppliers.assertActive(input.supplierId);
       return this.prisma.$transaction(async (tx) => {
         const balance = await ledger.inflowWithCost(tx, input.productId, toQty(input.quantity), input.unitCostCents);
         return this.insertMovement(tx, {
@@ -91,6 +97,8 @@ export class InventoryService {
           type: 'ENTRY',
           quantity: toQty(input.quantity),
           unitCostCents: input.unitCostCents,
+          supplierId: input.supplierId,
+          invoiceNumber: input.invoiceNumber,
           note: input.note,
           balanceAfter: balance.quantity,
           createdById: userId,

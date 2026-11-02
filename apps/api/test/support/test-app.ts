@@ -22,7 +22,7 @@ export async function createTestApp() {
 
 /** Zera os dados de negócio e ressincroniza papéis e permissões. */
 export async function resetDatabase(prisma: PrismaService) {
-  await prisma.$executeRawUnsafe('TRUNCATE users, sessions, user_roles, products, categories, stock_movements, stock_balances, sales, sale_items, sale_payments, cash_sessions, cash_movements, rate_limits CASCADE');
+  await prisma.$executeRawUnsafe('TRUNCATE users, sessions, user_roles, products, categories, stock_movements, stock_balances, sales, sale_items, sale_payments, sale_returns, sale_return_items, cash_sessions, cash_movements, rate_limits CASCADE');
   await syncAccessCatalog(prisma);
 }
 

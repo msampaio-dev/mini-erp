@@ -8,8 +8,10 @@ import {
 import {
   computeSaleTotals,
   isFractionalUnit,
+  returnRefundCents,
   settlePayments,
   type CancelSaleInput,
+  type CreateReturnInput,
   type CreateSaleInput,
   type Page,
   type Product,
@@ -35,40 +37,82 @@ const saleInclude = {
   payments: { orderBy: { method: 'asc' } },
   createdBy: userRef,
   canceledBy: userRef,
+  returns: { orderBy: { createdAt: 'asc' }, include: { createdBy: userRef, items: true } },
 } satisfies Prisma.SaleInclude;
 
 type SaleRow = Prisma.SaleGetPayload<{ include: typeof saleInclude }>;
 
-const toSale = (row: SaleRow): Sale => ({
-  id: row.id,
-  number: row.number,
-  status: row.status,
-  // Custo (unitCostCents) fica fora da resposta: margem é dado gerencial (Fase 6, relatorios:ler).
-  items: row.items.map((i) => ({
-    productId: i.productId,
-    sku: i.sku,
-    name: i.name,
-    unit: i.unit,
-    quantity: i.quantity.toNumber(),
-    unitPriceCents: i.unitPriceCents,
-    grossCents: i.grossCents,
-    discountCents: i.discountCents,
-    netCents: i.netCents,
-  })),
-  subtotalCents: row.subtotalCents,
-  discountCents: row.discountCents,
-  totalCents: row.totalCents,
-  payments: row.payments.map((p) => ({ method: p.method, amountCents: p.amountCents })),
-  receivedCents: row.receivedCents,
-  changeCents: row.changeCents,
-  note: row.note,
-  cashSessionId: row.cashSessionId,
-  createdBy: row.createdBy,
-  createdAt: row.createdAt.toISOString(),
-  canceledAt: row.canceledAt?.toISOString() ?? null,
-  canceledBy: row.canceledBy,
-  cancelReason: row.cancelReason,
-});
+/** Quanto de cada item de venda já voltou, somando todas as devoluções. */
+function returnedBySaleItem(row: SaleRow) {
+  const totals = new Map<string, { quantity: number; refundCents: number }>();
+  for (const r of row.returns) {
+    for (const i of r.items) {
+      const t = totals.get(i.saleItemId) ?? { quantity: 0, refundCents: 0 };
+      // Milésimos inteiros: somar 0,1 + 0,2 em float daria 0,30000000000000004.
+      t.quantity = (Math.round(t.quantity * 1000) + Math.round(i.quantity.toNumber() * 1000)) / 1000;
+      t.refundCents += i.refundCents;
+      totals.set(i.saleItemId, t);
+    }
+  }
+  return totals;
+}
+
+const toSale = (row: SaleRow): Sale => {
+  const returned = returnedBySaleItem(row);
+  const byItemId = new Map(row.items.map((i) => [i.id, i]));
+  return {
+    id: row.id,
+    number: row.number,
+    status: row.status,
+    // Custo (unitCostCents) fica fora da resposta: margem é dado gerencial (Fase 6, relatorios:ler).
+    items: row.items.map((i) => ({
+      productId: i.productId,
+      sku: i.sku,
+      name: i.name,
+      unit: i.unit,
+      quantity: i.quantity.toNumber(),
+      unitPriceCents: i.unitPriceCents,
+      grossCents: i.grossCents,
+      discountCents: i.discountCents,
+      netCents: i.netCents,
+      returnedQuantity: returned.get(i.id)?.quantity ?? 0,
+      refundedCents: returned.get(i.id)?.refundCents ?? 0,
+    })),
+    subtotalCents: row.subtotalCents,
+    discountCents: row.discountCents,
+    totalCents: row.totalCents,
+    payments: row.payments.map((p) => ({ method: p.method, amountCents: p.amountCents })),
+    receivedCents: row.receivedCents,
+    changeCents: row.changeCents,
+    note: row.note,
+    cashSessionId: row.cashSessionId,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt.toISOString(),
+    canceledAt: row.canceledAt?.toISOString() ?? null,
+    canceledBy: row.canceledBy,
+    cancelReason: row.cancelReason,
+    returns: row.returns.map((r) => ({
+      id: r.id,
+      number: r.number,
+      reason: r.reason,
+      refundMethod: r.refundMethod,
+      refundCents: r.refundCents,
+      restock: r.restock,
+      createdBy: r.createdBy,
+      createdAt: r.createdAt.toISOString(),
+      items: r.items.map((i) => {
+        const item = byItemId.get(i.saleItemId)!;
+        return {
+          productId: item.productId,
+          name: item.name,
+          unit: item.unit,
+          quantity: i.quantity.toNumber(),
+          refundCents: i.refundCents,
+        };
+      }),
+    })),
+  };
+};
 
 export interface SaleResult {
   sale: Sale;
@@ -120,7 +164,12 @@ export class SalesService {
           },
           select: { id: true, number: true },
         });
-        await this.cash.recordSaleCash(tx, { sessionId: cashSessionId, saleId: sale.id, amountCents: payment.cashNetCents, userId });
+        await this.cash.recordSaleCash(tx, {
+          sessionId: cashSessionId,
+          saleId: sale.id,
+          amountCents: payment.cashNetCents,
+          userId,
+        });
 
         // ORDEM FIXA DE LOCKS (D23): baixa sempre em ordem de productId. Sem isso, a venda
         // [A, B] e a venda [B, A] simultâneas podem travar uma esperando a outra (deadlock):
@@ -178,6 +227,15 @@ export class SalesService {
    */
   async cancel(id: string, input: CancelSaleInput, userId: string): Promise<Sale> {
     await this.prisma.$transaction(async (tx) => {
+      // Trava a venda antes de olhar as devoluções: uma devolução simultânea (que também trava a
+      // venda) termina antes ou começa depois, nunca no meio.
+      await tx.$queryRaw`SELECT id FROM sales WHERE id = ${id}::uuid FOR UPDATE`;
+      if (await tx.saleReturn.count({ where: { saleId: id } })) {
+        throw new ConflictException({
+          code: 'SALE_HAS_RETURNS',
+          message: 'Esta venda já tem devolução: registre outra devolução para os itens restantes',
+        });
+      }
       const { count } = await tx.sale.updateMany({
         where: { id, status: 'COMPLETED' },
         data: { status: 'CANCELED', canceledAt: new Date(), canceledById: userId, cancelReason: input.reason },
@@ -214,6 +272,111 @@ export class SalesService {
       });
     });
     return this.get(id);
+  }
+
+  /**
+   * Devolução parcial (ADR 0019). A venda fica travada (FOR UPDATE) durante a devolução: duas
+   * devoluções simultâneas da mesma venda, ou devolução × cancelamento, acontecem uma de cada vez,
+   * e a conta "quanto ainda pode voltar" é feita com o saldo já atualizado.
+   */
+  async createReturn(saleId: string, input: CreateReturnInput, userId: string, key: string): Promise<SaleResult> {
+    const existing = await this.findReturnByKey(userId, key);
+    if (existing) return this.replayReturn(existing, saleId, input);
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const [sale] = await tx.$queryRaw<{ status: string; number: number; cash_session_id: string | null }[]>`
+          SELECT status, number, cash_session_id FROM sales WHERE id = ${saleId}::uuid FOR UPDATE`;
+        if (!sale) throw new NotFoundException('Venda não encontrada');
+        if (sale.status !== 'COMPLETED') {
+          throw new ConflictException({ code: 'SALE_CANCELED', message: 'Venda cancelada não tem devolução' });
+        }
+
+        // Lido DEPOIS do lock: inclui as devoluções que terminaram enquanto esta esperava.
+        const row = await tx.sale.findUniqueOrThrow({ where: { id: saleId }, include: saleInclude });
+        const returned = returnedBySaleItem(row);
+        const lines = input.items.map((req, i) => {
+          const item = row.items.find((it) => it.productId === req.productId);
+          if (!item) invalid(`items.${i}.productId`, 'Este produto não está na venda');
+          if (!isFractionalUnit(item.unit) && !Number.isInteger(req.quantity)) {
+            invalid(`items.${i}.quantity`, `A unidade ${item.unit} não aceita quantidade fracionada`);
+          }
+          const already = returned.get(item.id) ?? { quantity: 0, refundCents: 0 };
+          const remaining = (Math.round(item.quantity.toNumber() * 1000) - Math.round(already.quantity * 1000)) / 1000;
+          if (req.quantity > remaining) {
+            throw new UnprocessableEntityException({
+              code: 'RETURN_EXCEEDS_SOLD',
+              message: `${item.name}: só ${remaining.toLocaleString('pt-BR')} ${item.unit} ainda pode(m) ser devolvido(s)`,
+              productId: item.productId,
+              remaining,
+            });
+          }
+          const refundCents = returnRefundCents(
+            {
+              netCents: item.netCents,
+              quantity: item.quantity.toNumber(),
+              returnedQuantity: already.quantity,
+              refundedCents: already.refundCents,
+            },
+            req.quantity,
+          );
+          return { item, quantity: req.quantity, refundCents };
+        });
+        const refundCents = lines.reduce((a, l) => a + l.refundCents, 0);
+
+        const created = await tx.saleReturn.create({
+          data: {
+            saleId,
+            reason: input.reason,
+            refundMethod: input.refundMethod,
+            refundCents,
+            restock: input.restock,
+            createdById: userId,
+            idempotencyKey: key,
+          },
+          select: { id: true, number: true },
+        });
+        const note = `Devolução nº ${created.number} da venda nº ${sale.number}`;
+
+        // Mesma ordem de locks das vendas (D23): por produto.
+        for (const line of [...lines].sort((a, b) => (a.item.productId < b.item.productId ? -1 : 1))) {
+          const stockMovementId = input.restock
+            ? await this.inventory.recordReturnInflow(tx, {
+                productId: line.item.productId,
+                quantity: line.quantity,
+                userId,
+                note,
+              })
+            : null;
+          await tx.saleReturnItem.create({
+            data: {
+              returnId: created.id,
+              saleItemId: line.item.id,
+              quantity: line.quantity.toFixed(3),
+              refundCents: line.refundCents,
+              stockMovementId,
+            },
+          });
+        }
+
+        if (input.refundMethod === 'CASH') {
+          await this.cash.recordCashOut(tx, {
+            type: 'REFUND',
+            saleSessionId: sale.cash_session_id,
+            saleId,
+            amountCents: refundCents,
+            userId,
+            note,
+          });
+        }
+      });
+      return { sale: await this.get(saleId), replayed: false };
+    } catch (err) {
+      if (uniqueViolationTarget(err)?.includes('idempotency')) {
+        return this.replayReturn((await this.findReturnByKey(userId, key))!, saleId, input);
+      }
+      throw err;
+    }
   }
 
   async get(id: string): Promise<Sale> {
@@ -304,6 +467,37 @@ export class SalesService {
       if (err instanceof RangeError) invalid('payments', err.message);
       throw err;
     }
+  }
+
+  private findReturnByKey(userId: string, key: string) {
+    return this.prisma.saleReturn.findUnique({
+      where: { createdById_idempotencyKey: { createdById: userId, idempotencyKey: key } },
+      include: { items: { include: { saleItem: { select: { productId: true } } } } },
+    });
+  }
+
+  /** Mesma chave = mesma devolução: confere venda e itens antes de devolver o resultado original. */
+  private async replayReturn(
+    row: NonNullable<Awaited<ReturnType<SalesService['findReturnByKey']>>>,
+    saleId: string,
+    input: CreateReturnInput,
+  ): Promise<SaleResult> {
+    const asKey = (items: { productId: string; quantity: number }[]) =>
+      items
+        .map((i) => `${i.productId}:${i.quantity}`)
+        .sort()
+        .join('|');
+    const same =
+      row.saleId === saleId &&
+      asKey(row.items.map((i) => ({ productId: i.saleItem.productId, quantity: i.quantity.toNumber() }))) ===
+        asKey(input.items);
+    if (!same) {
+      throw new UnprocessableEntityException({
+        code: 'IDEMPOTENCY_KEY_REUSED',
+        message: 'Esta Idempotency-Key já foi usada em outra operação. Gere uma nova chave.',
+      });
+    }
+    return { sale: await this.get(saleId), replayed: true };
   }
 
   private findByKey(userId: string, key: string) {

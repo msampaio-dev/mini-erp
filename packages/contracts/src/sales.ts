@@ -61,6 +61,22 @@ export const createSaleSchema = z.object({
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 
+/** Devolução parcial (ADR 0019): o que volta, por quê e como o dinheiro volta ao cliente. */
+export const createReturnSchema = z.object({
+  items: z
+    .array(z.object({ productId: z.uuid(), quantity: itemQuantitySchema }))
+    .min(1, 'Selecione ao menos um item')
+    .max(200)
+    .refine((items) => new Set(items.map((i) => i.productId)).size === items.length, {
+      message: 'Produto repetido na devolução',
+    }),
+  reason: z.string().trim().min(3, 'Informe o motivo da devolução').max(500),
+  refundMethod: z.enum(PAYMENT_KEYS),
+  /** false = a mercadoria não volta à venda (defeito, vencida): não entra no estoque. */
+  restock: z.boolean().default(true),
+});
+export type CreateReturnInput = z.infer<typeof createReturnSchema>;
+
 export const cancelSaleSchema = z.object({
   reason: z.string().trim().min(3, 'Informe o motivo do cancelamento').max(500),
 });
@@ -82,8 +98,32 @@ export const saleItemSchema = z.object({
   grossCents: z.number().int(),
   discountCents: z.number().int(),
   netCents: z.number().int(),
+  /** Já devolvido deste item e quanto foi reembolsado por ele (ADR 0019). */
+  returnedQuantity: z.number(),
+  refundedCents: z.number().int(),
 });
 export type SaleItem = z.infer<typeof saleItemSchema>;
+
+export const saleReturnSchema = z.object({
+  id: z.uuid(),
+  number: z.number().int(),
+  reason: z.string(),
+  refundMethod: z.enum(PAYMENT_KEYS),
+  refundCents: z.number().int(),
+  restock: z.boolean(),
+  createdBy: userRefSchema,
+  createdAt: z.iso.datetime(),
+  items: z.array(
+    z.object({
+      productId: z.uuid(),
+      name: z.string(),
+      unit: z.enum(UNIT_KEYS),
+      quantity: z.number(),
+      refundCents: z.number().int(),
+    }),
+  ),
+});
+export type SaleReturn = z.infer<typeof saleReturnSchema>;
 
 export const saleSchema = z.object({
   id: z.uuid(),
@@ -104,11 +144,12 @@ export const saleSchema = z.object({
   canceledAt: z.iso.datetime().nullable(),
   canceledBy: userRefSchema.nullable(),
   cancelReason: z.string().nullable(),
+  returns: z.array(saleReturnSchema),
 });
 export type Sale = z.infer<typeof saleSchema>;
 
 export const saleSummarySchema = saleSchema
-  .omit({ items: true, note: true, cancelReason: true, canceledBy: true, cashSessionId: true })
+  .omit({ items: true, note: true, cancelReason: true, canceledBy: true, cashSessionId: true, returns: true })
   .extend({ itemCount: z.number().int() });
 export type SaleSummary = z.infer<typeof saleSummarySchema>;
 

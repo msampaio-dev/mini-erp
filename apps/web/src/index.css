@@ -794,3 +794,11 @@ fieldset.plain legend {
 .totals .grand.down {
   color: var(--fail);
 }
+
+ul.plain-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}

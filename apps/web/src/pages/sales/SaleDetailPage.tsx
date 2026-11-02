@@ -4,6 +4,8 @@ import { cancelSaleSchema, formatCents, PAYMENT_METHODS, type Sale } from '@mini
 import { useAuth } from '../../auth/auth-context.ts'
 import { useCancelSale, useSale } from '../../lib/sales-queries.ts'
 import { formatQuantity } from '../../lib/quantity.ts'
+import { ReturnForm, ReturnsHistory } from './ReturnForm.tsx'
+import { hasReturnable } from './returns.ts'
 import { SaleStatusBadge } from './SaleStatusBadge.tsx'
 
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -27,6 +29,8 @@ export function SaleDetailPage() {
 function SaleDetail({ sale }: { sale: Sale }) {
   const { can } = useAuth()
   const [canceling, setCanceling] = useState(false)
+  const [returning, setReturning] = useState(false)
+  const anyReturned = sale.returns.length > 0
 
   return (
     <section className="narrow-wide">
@@ -37,7 +41,13 @@ function SaleDetail({ sale }: { sale: Sale }) {
         <h1>Venda nº {sale.number}</h1>
         <div className="actions">
           <SaleStatusBadge status={sale.status} />
-          {can('vendas:cancelar') && sale.status === 'COMPLETED' && !canceling && (
+          {can('vendas:devolver') && hasReturnable(sale) && !returning && !canceling && (
+            <button type="button" className="secondary small" onClick={() => setReturning(true)}>
+              Registrar devolução
+            </button>
+          )}
+          {/* Venda com devolução não se cancela: o restante sai por outra devolução (ADR 0019). */}
+          {can('vendas:cancelar') && sale.status === 'COMPLETED' && !anyReturned && !canceling && !returning && (
             <button type="button" className="secondary small" onClick={() => setCanceling(true)}>
               Cancelar venda
             </button>
@@ -55,6 +65,7 @@ function SaleDetail({ sale }: { sale: Sale }) {
         </p>
       )}
       {canceling && <CancelForm sale={sale} onDone={() => setCanceling(false)} />}
+      {returning && <ReturnForm sale={sale} onDone={() => setReturning(false)} />}
 
       <div className="table-wrap">
         <table>
@@ -66,6 +77,7 @@ function SaleDetail({ sale }: { sale: Sale }) {
               <th className="num">Bruto</th>
               <th className="num">Desconto</th>
               <th className="num">Líquido</th>
+              {anyReturned && <th className="num">Devolvido</th>}
             </tr>
           </thead>
           <tbody>
@@ -81,6 +93,11 @@ function SaleDetail({ sale }: { sale: Sale }) {
                 <td className="num">{formatCents(i.grossCents)}</td>
                 <td className="num">{i.discountCents ? `− ${formatCents(i.discountCents)}` : '—'}</td>
                 <td className="num">{formatCents(i.netCents)}</td>
+                {anyReturned && (
+                  <td className="num">
+                    {i.returnedQuantity > 0 ? `${formatQuantity(i.returnedQuantity)} · ${formatCents(i.refundedCents)}` : '—'}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -107,6 +124,7 @@ function SaleDetail({ sale }: { sale: Sale }) {
           </>
         )}
       </dl>
+      <ReturnsHistory returns={sale.returns} />
     </section>
   )
 }

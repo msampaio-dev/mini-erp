@@ -34,6 +34,7 @@ model User {
   cashSessions   CashSession[]   @relation("CashSessionOperator")
   cashClosed     CashSession[]   @relation("CashSessionClosedBy")
   cashMovements  CashMovement[]
+  saleReturns    SaleReturn[]
 
   @@map("users")
 }
@@ -182,6 +183,8 @@ enum MovementType {
   ADJUSTMENT
   REVERSAL
   SALE
+  /// Devolução de cliente (ADR 0019): a mercadoria volta ao estoque.
+  RETURN
 }
 
 /// Livro-razão: append-only. Um trigger no banco bloqueia UPDATE e DELETE.
@@ -210,6 +213,7 @@ model StockMovement {
   reversalOf StockMovement? @relation("Reversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy StockMovement? @relation("Reversal")
   saleItem   SaleItem?
+  returnItem SaleReturnItem?
 
   @@unique([createdById, idempotencyKey], map: "stock_movements_idempotency_key")
   @@index([productId, createdAt(sort: Desc)])
@@ -267,6 +271,7 @@ model Sale {
   items         SaleItem[]
   payments      SalePayment[]
   cashMovements CashMovement[]
+  returns       SaleReturn[]
   createdBy     User          @relation("SaleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   canceledBy    User?         @relation("SaleCanceledBy", fields: [canceledById], references: [id], onDelete: Restrict)
   cashSession   CashSession?  @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
@@ -276,6 +281,50 @@ model Sale {
   @@index([status])
   @@index([cashSessionId])
   @@map("sales")
+}
+
+/// Devolução parcial (ADR 0019). A venda continua COMPLETED; a devolução é um documento à parte,
+/// como o estorno no estoque: nada do que já foi registrado é reescrito.
+model SaleReturn {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  number         Int           @unique @default(autoincrement())
+  saleId         String        @map("sale_id") @db.Uuid
+  reason         String
+  /// Como o dinheiro voltou ao cliente. Em dinheiro, sai de uma gaveta aberta (D47).
+  refundMethod   PaymentMethod @map("refund_method")
+  refundCents    Int           @map("refund_cents")
+  /// false = a mercadoria não volta a ser vendável (defeito, vencida): sem entrada no estoque.
+  restock        Boolean
+  createdById    String        @map("created_by_id") @db.Uuid
+  idempotencyKey String?       @map("idempotency_key") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  sale      Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  createdBy User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items     SaleReturnItem[]
+
+  @@unique([createdById, idempotencyKey], map: "sale_returns_idempotency_key")
+  @@index([saleId])
+  @@index([createdAt(sort: Desc)])
+  @@map("sale_returns")
+}
+
+model SaleReturnItem {
+  id              String  @id @default(uuid(7)) @db.Uuid
+  returnId        String  @map("return_id") @db.Uuid
+  saleItemId      String  @map("sale_item_id") @db.Uuid
+  quantity        Decimal @db.Decimal(14, 3)
+  refundCents     Int     @map("refund_cents")
+  /// Entrada no estoque (nula quando a mercadoria não volta à venda).
+  stockMovementId String? @unique @map("stock_movement_id") @db.Uuid
+
+  saleReturn    SaleReturn     @relation(fields: [returnId], references: [id], onDelete: Restrict)
+  saleItem      SaleItem       @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  stockMovement StockMovement? @relation(fields: [stockMovementId], references: [id], onDelete: Restrict)
+
+  @@unique([returnId, saleItemId])
+  @@index([saleItemId])
+  @@map("sale_return_items")
 }
 
 /// Pagamento dividido (D45): uma linha por forma de pagamento.
@@ -317,9 +366,10 @@ model SaleItem {
   /// A saída de estoque que esta linha gerou. Vendas aponta para Estoque, nunca o contrário.
   stockMovementId String  @unique @map("stock_movement_id") @db.Uuid
 
-  sale          Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
-  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
-  stockMovement StockMovement @relation(fields: [stockMovementId], references: [id], onDelete: Restrict)
+  sale          Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  product       Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  stockMovement StockMovement    @relation(fields: [stockMovementId], references: [id], onDelete: Restrict)
+  returns       SaleReturnItem[]
 
   @@unique([saleId, productId])
   @@unique([saleId, position])

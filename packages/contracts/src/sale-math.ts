@@ -83,6 +83,29 @@ export function computeSaleTotals(
   };
 }
 
+/**
+ * Reembolso de uma devolução parcial (ADR 0019): proporcional ao valor LÍQUIDO pago pelo item
+ * (o desconto da venda já está rateado nele).
+ *
+ * Calculado pelo ACUMULADO: reembolso = arred(líquido × devolvido_total / vendido) − já_reembolsado.
+ * Arredondar cada devolução isoladamente erra para cima: R$ 5,00 por 10 unidades (R$ 0,50 cada)
+ * devolvidas uma a uma dariam R$ 1,00 por vez, R$ 9,00 em nove devoluções. Pelo acumulado, a soma
+ * nunca passa do líquido, e devolver tudo reembolsa exatamente o que foi pago.
+ */
+export function returnRefundCents(
+  item: {
+    netCents: number;
+    quantity: number;
+    returnedQuantity: number;
+    refundedCents: number;
+  },
+  quantity: number,
+): number {
+  const sold = BigInt(Math.round(item.quantity * 1000));
+  const after = BigInt(Math.round((item.returnedQuantity + quantity) * 1000));
+  return Number(divRound(BigInt(item.netCents) * after, sold)) - item.refundedCents;
+}
+
 export type PaymentLine = { method: 'CASH' | 'PIX' | 'DEBIT' | 'CREDIT'; amountCents: number };
 
 export interface PaymentSettlement {
@@ -102,7 +125,8 @@ export interface PaymentSettlement {
 export function settlePayments(totalCents: number, payments: PaymentLine[]): PaymentSettlement {
   const cash = payments.find((p) => p.method === 'CASH')?.amountCents ?? 0;
   const received = payments.reduce((a, p) => a + p.amountCents, 0);
-  if (received - cash > totalCents) throw new RangeError('Cartão e Pix não podem passar do total: troco só em dinheiro');
+  if (received - cash > totalCents)
+    throw new RangeError('Cartão e Pix não podem passar do total: troco só em dinheiro');
   if (received < totalCents) throw new RangeError('Valor pago menor que o total');
   const changeCents = received - totalCents;
   return { receivedCents: received, changeCents, cashNetCents: cash - changeCents };

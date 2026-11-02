@@ -2,9 +2,11 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Res, HttpCode
 import type { Response } from 'express';
 import {
   cancelSaleSchema,
+  createReturnSchema,
   createSaleSchema,
   saleListQuerySchema,
   type CancelSaleInput,
+  type CreateReturnInput,
   type CreateSaleInput,
   type Page,
   type Sale,
@@ -44,6 +46,21 @@ export class SalesController {
   @RequirePermission('vendas:ler')
   get(@Param('id', ParseUUIDPipe) id: string): Promise<Sale> {
     return this.sales.get(id);
+  }
+
+  @Post(':id/returns')
+  @RequirePermission('vendas:devolver')
+  async createReturn(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(createReturnSchema)) input: CreateReturnInput,
+    @IdempotencyKey() key: string,
+    @CurrentAuth() auth: AuthContext,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Sale> {
+    const result = await this.sales.createReturn(id, input, auth.user.id, key);
+    res.status(result.replayed ? 200 : 201);
+    if (result.replayed) res.setHeader('Idempotent-Replayed', 'true');
+    return result.sale;
   }
 
   @Post(':id/cancel')

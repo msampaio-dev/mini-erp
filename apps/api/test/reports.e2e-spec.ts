@@ -85,6 +85,7 @@ describe('Relatórios (e2e)', () => {
         canceledCount: 1,
         grossCents: 3999,
         discountCents: 0,
+        returnsCents: 0,
         netCents: 3999,
         costCents: 2000,
         marginCents: 1999,
@@ -230,6 +231,37 @@ describe('Relatórios (e2e)', () => {
       const lines = text.slice(1).trim().split('\r\n');
       expect(lines[0]).toBe('SKU;Produto;Quantidade;Receita líquida (R$);Custo (R$);Margem (R$);Margem (%)');
       expect(lines[3]).toBe('CAF;Café;1;19,99;12,00;7,99;39,97');
+    });
+  });
+
+  describe('devoluções (ADR 0019)', () => {
+    it('abatem receita e custo NA DATA DA DEVOLUÇÃO; o dia da venda não muda', async () => {
+      const { caneta } = await scenario(); // dia 10: 2 canetas (R$ 20,00, custo R$ 8,00) às 22:30
+      const venda = (await vendedor.get('/api/sales').query({ status: 'COMPLETED' }).expect(200)).body.items.find(
+        (s: Sale) => s.totalCents === 2000,
+      ) as Sale;
+      const antes = await report<SalesReport>('sales', { from: '2026-10-10', to: '2026-10-10' });
+
+      // A devolução acontece HOJE (o registro de devolução é imutável: não dá para movê-lo no tempo).
+      await gerente
+        .post(`/api/sales/${venda.id}/returns`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ items: [{ productId: caneta.id, quantity: 1 }], reason: 'defeito', refundMethod: 'PIX' })
+        .expect(201);
+
+      const depois = await report<SalesReport>('sales', { from: '2026-10-10', to: '2026-10-10' });
+      expect(depois.totals).toEqual(antes.totals);
+
+      const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+      const hoje = await report<SalesReport>('sales', { from: today, to: today });
+      expect(hoje.totals).toMatchObject({ salesCount: 0, returnsCents: 1000, netCents: -1000, costCents: -400, marginCents: -600 });
+      expect(hoje.series[0]).toMatchObject({ netCents: -1000, marginCents: -600 });
+
+      // Período que cobre as duas datas: a venda e a devolução se compensam por produto.
+      const tudo = await report<MarginRow[]>('margin', { from: '2026-10-01', to: today, groupBy: 'product' });
+      expect(tudo.find((r) => r.sku === 'CNT')).toMatchObject({ quantity: 1, netCents: 1000, costCents: 400 });
+      const vendedores = await report<SellerRow[]>('sellers', { from: today, to: today });
+      expect(vendedores).toEqual([expect.objectContaining({ name: 'vendedor', netCents: -1000 })]);
     });
   });
 

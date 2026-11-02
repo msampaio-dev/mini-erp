@@ -42,5 +42,14 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'caixa fechado cujo esperado não bate com as movimentações';
   END IF;
+  -- Devolução (ADR 0019): nada volta além do vendido nem é reembolsado além do pago.
+  IF EXISTS (
+    SELECT 1 FROM sale_items i
+    JOIN (SELECT sale_item_id, sum(quantity) AS qty, sum(refund_cents) AS refund
+          FROM sale_return_items GROUP BY sale_item_id) r ON r.sale_item_id = i.id
+    WHERE r.qty > i.quantity OR r.refund > i.net_cents
+  ) THEN
+    RAISE EXCEPTION 'item devolvido além do vendido';
+  END IF;
   RAISE NOTICE 'backup restaurado e consistente';
 END $$;

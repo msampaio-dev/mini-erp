@@ -4,10 +4,11 @@ import {
   salePageSchema,
   saleSchema,
   type CancelSaleInput,
+  type CreateReturnInput,
   type CreateSaleInput,
   type SaleStatus,
 } from '@mini-erp/contracts'
-import { apiGet, apiPost, ApiError, toQueryString } from './api.ts'
+import { apiGet, apiPost, apiPostIdempotent, ApiError, toQueryString } from './api.ts'
 import { cashKeys } from './cash-queries.ts'
 import { inventoryKeys } from './inventory-queries.ts'
 
@@ -68,6 +69,16 @@ export function useCancelSale(id: string) {
   const invalidate = useInvalidateAfterSale()
   return useMutation({
     mutationFn: (input: CancelSaleInput) => apiPost(`/sales/${id}/cancel`, input, saleSchema),
+    onSuccess: invalidate,
+  })
+}
+
+/** Devolução parcial (ADR 0019): mexe no estoque e, em dinheiro, no caixa. */
+export function useCreateReturn(id: string) {
+  const invalidate = useInvalidateAfterSale()
+  return useMutation({
+    mutationFn: ({ input, key }: { input: CreateReturnInput; key: string }) =>
+      apiPostIdempotent(`/sales/${id}/returns`, input, key, saleSchema),
     onSuccess: invalidate,
   })
 }

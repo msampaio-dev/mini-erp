@@ -138,7 +138,18 @@ function SalesSection({ period, granularity, onGranularity }: { period: Period; 
   return (
     <div className={isPlaceholderData ? 'loading' : undefined}>
       <div className="stats">
-        <Kpi label="Receita líquida" value={formatCents(t.netCents)} hint={t.discountCents ? `${formatCents(t.discountCents)} em descontos` : undefined} />
+        <Kpi
+          label="Receita líquida"
+          value={formatCents(t.netCents)}
+          hint={
+            [
+              t.discountCents && `${formatCents(t.discountCents)} em descontos`,
+              t.returnsCents && `${formatCents(t.returnsCents)} em devoluções`,
+            ]
+              .filter(Boolean)
+              .join(' · ') || undefined
+          }
+        />
         <Kpi label="Margem bruta" value={formatCents(t.marginCents)} hint={`${pct(t.marginPct)} da receita`} />
         <Kpi label="Ticket médio" value={formatCents(t.avgTicketCents)} />
         <Kpi label="Vendas" value={t.salesCount.toLocaleString('pt-BR')} hint={t.canceledCount ? `${t.canceledCount} cancelada(s)` : undefined} />

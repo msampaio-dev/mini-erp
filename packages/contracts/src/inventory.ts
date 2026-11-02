@@ -5,7 +5,7 @@ import { pageQuerySchema, pageSchema } from './pagination.js';
 /** Cabeçalho que torna as escritas de estoque idempotentes (ADR 0010). */
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
 
-export const MOVEMENT_TYPES = ['ENTRY', 'ADJUSTMENT', 'REVERSAL', 'SALE'] as const;
+export const MOVEMENT_TYPES = ['ENTRY', 'ADJUSTMENT', 'REVERSAL', 'SALE', 'RETURN'] as const;
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
 export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
@@ -13,6 +13,7 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   ADJUSTMENT: 'Ajuste',
   REVERSAL: 'Estorno',
   SALE: 'Venda',
+  RETURN: 'Devolução de cliente',
 };
 
 export const ADJUSTMENT_REASONS = {

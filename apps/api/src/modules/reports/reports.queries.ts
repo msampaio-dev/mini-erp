@@ -13,8 +13,11 @@ import { Prisma } from '../../generated/prisma/client.js';
  */
 const tz = REPORT_TIMEZONE;
 
+// NOT MATERIALIZED: usado por vendas E devoluções, o CTE seria materializado (calculado à parte)
+// e o planejador perderia de vista as datas do período, trocando o hash join por um laço
+// aninhado: margem por categoria em 1 ano foi de 77 ms para 254 ms (medido, ADR 0019).
 const bounds = (p: Period) => Prisma.sql`
-  bounds AS (
+  bounds AS NOT MATERIALIZED (
     SELECT (${p.from}::date)::timestamp AT TIME ZONE ${tz} AS lo,
            ((${p.to}::date) + 1)::timestamp AT TIME ZONE ${tz} AS hi
   )`;
@@ -26,6 +29,35 @@ const itemsWithSale = Prisma.sql`
   CROSS JOIN bounds b`;
 
 const inPeriod = Prisma.sql`s.created_at >= b.lo AND s.created_at < b.hi`;
+
+/**
+ * Itens devolvidos NO PERÍODO (ADR 0019): a devolução abate receita e custo na data em que
+ * acontece, não na data da venda. Assim um mês já fechado não muda quando alguém devolve depois.
+ * O custo devolvido usa o custo fotografado na venda: a margem daquela unidade some por inteiro.
+ */
+const returnedInPeriod = Prisma.sql`
+  sale_return_items ri
+  JOIN sale_returns r ON r.id = ri.return_id
+  JOIN sale_items i ON i.id = ri.sale_item_id
+  JOIN sales s ON s.id = i.sale_id
+  CROSS JOIN bounds b
+  WHERE r.created_at >= b.lo AND r.created_at < b.hi`;
+
+/**
+ * Linhas que mexem na receita do período: itens vendidos (+) e itens devolvidos (−), cada um
+ * na sua própria data. Margem, ABC e categorias somam esta lista.
+ */
+const revenueLines = Prisma.sql`
+  lines AS (
+    SELECT i.product_id, i.category_id, i.category_name,
+           i.quantity, i.net_cents AS net, i.quantity * i.unit_cost_cents AS cost
+    FROM ${itemsWithSale}
+    WHERE s.status = 'COMPLETED' AND ${inPeriod}
+    UNION ALL
+    SELECT i.product_id, i.category_id, i.category_name,
+           -ri.quantity, -ri.refund_cents, -(ri.quantity * i.unit_cost_cents)
+    FROM ${returnedInPeriod}
+  )`;
 
 /** Totais do período. FILTER faz várias contagens/somas numa única passada pela tabela. */
 export const salesTotalsSql = (p: Period) => Prisma.sql`
@@ -45,8 +77,15 @@ export const salesTotalsSql = (p: Period) => Prisma.sql`
     SELECT coalesce(round(sum(i.quantity * i.unit_cost_cents)), 0)::bigint AS cost
     FROM ${itemsWithSale}
     WHERE s.status = 'COMPLETED' AND ${inPeriod}
+  ),
+  ret AS (
+    SELECT coalesce(sum(ri.refund_cents), 0)::bigint                    AS returns,
+           coalesce(round(sum(ri.quantity * i.unit_cost_cents)), 0)::bigint AS returned_cost
+    FROM ${returnedInPeriod}
   )
-  SELECT head.*, cost.cost FROM head, cost`;
+  SELECT head.sales_count, head.canceled_count, head.gross, head.discount,
+         ret.returns, (head.net - ret.returns)::bigint AS net, (cost.cost - ret.returned_cost)::bigint AS cost
+  FROM head, cost, ret`;
 
 /**
  * Série temporal. generate_series cria TODOS os dias/semanas/meses do período, e o LEFT JOIN
@@ -76,14 +115,24 @@ export const salesSeriesSql = (p: Period, granularity: Granularity) => Prisma.sq
     FROM ${itemsWithSale}
     WHERE s.status = 'COMPLETED' AND ${inPeriod}
     GROUP BY 1
+  ),
+  ret AS (
+    -- Devoluções no dia/semana/mês em que ACONTECERAM.
+    SELECT date_trunc(${granularity}, r.created_at AT TIME ZONE ${tz})::date AS bucket,
+           sum(ri.refund_cents)::bigint                       AS returns,
+           round(sum(ri.quantity * i.unit_cost_cents))::bigint AS returned_cost
+    FROM ${returnedInPeriod}
+    GROUP BY 1
   )
   SELECT to_char(bk.bucket, 'YYYY-MM-DD') AS bucket,
-         coalesce(sold.sales_count, 0)                         AS sales_count,
-         coalesce(sold.net, 0)::bigint                         AS net,
-         (coalesce(sold.net, 0) - coalesce(cost.cost, 0))::bigint AS margin
+         coalesce(sold.sales_count, 0)                                  AS sales_count,
+         (coalesce(sold.net, 0) - coalesce(ret.returns, 0))::bigint     AS net,
+         (coalesce(sold.net, 0) - coalesce(ret.returns, 0)
+          - coalesce(cost.cost, 0) + coalesce(ret.returned_cost, 0))::bigint AS margin
   FROM buckets bk
   LEFT JOIN sold USING (bucket)
   LEFT JOIN cost USING (bucket)
+  LEFT JOIN ret USING (bucket)
   ORDER BY bk.bucket`;
 
 /** Margem por produto ou por categoria (receita líquida - custo fotografado). */
@@ -95,21 +144,20 @@ export const marginSql = (p: Period, groupBy: 'product' | 'category') => {
   const key =
     groupBy === 'product'
       ? Prisma.sql`p.id AS id, p.sku AS sku, p.name AS name`
-      : Prisma.sql`i.category_id AS id, NULL::text AS sku,
-                   coalesce(c.name::text, max(i.category_name), 'Sem categoria') AS name`;
-  const group = groupBy === 'product' ? Prisma.sql`p.id, p.sku, p.name` : Prisma.sql`i.category_id, c.name`;
+      : Prisma.sql`l.category_id AS id, NULL::text AS sku,
+                   coalesce(c.name::text, max(l.category_name), 'Sem categoria') AS name`;
+  const group = groupBy === 'product' ? Prisma.sql`p.id, p.sku, p.name` : Prisma.sql`l.category_id, c.name`;
   return Prisma.sql`
-    WITH ${bounds(p)}
+    WITH ${bounds(p)}, ${revenueLines}
     SELECT ${key},
-           sum(i.quantity)::text                              AS quantity,
-           sum(i.net_cents)::bigint                           AS net,
-           round(sum(i.quantity * i.unit_cost_cents))::bigint AS cost
-    FROM ${itemsWithSale}
-    JOIN products p ON p.id = i.product_id
-    LEFT JOIN categories c ON c.id = i.category_id
-    WHERE s.status = 'COMPLETED' AND ${inPeriod}
+           sum(l.quantity)::text        AS quantity,
+           sum(l.net)::bigint           AS net,
+           round(sum(l.cost))::bigint   AS cost
+    FROM lines l
+    JOIN products p ON p.id = l.product_id
+    LEFT JOIN categories c ON c.id = l.category_id
     GROUP BY ${group}
-    ORDER BY (sum(i.net_cents) - round(sum(i.quantity * i.unit_cost_cents))) DESC, 3`;
+    ORDER BY (sum(l.net) - round(sum(l.cost))) DESC, 3`;
 };
 
 /**
@@ -118,12 +166,12 @@ export const marginSql = (p: Period, groupBy: 'product' | 'category') => {
  */
 export const abcSql = (p: Period) => Prisma.sql`
   WITH ${bounds(p)},
+  ${revenueLines},
   per_product AS (
-    SELECT i.product_id, sum(i.net_cents)::bigint AS net
-    FROM ${itemsWithSale}
-    WHERE s.status = 'COMPLETED' AND ${inPeriod}
-    GROUP BY i.product_id
-    HAVING sum(i.net_cents) > 0
+    SELECT l.product_id, sum(l.net)::bigint AS net
+    FROM lines l
+    GROUP BY l.product_id
+    HAVING sum(l.net) > 0
   ),
   ranked AS (
     SELECT product_id, net,
@@ -180,13 +228,26 @@ export const staleSql = (days: number) => Prisma.sql`
 
 /** Desempenho por vendedor. */
 export const sellersSql = (p: Period) => Prisma.sql`
-  WITH ${bounds(p)}
+  WITH ${bounds(p)},
+  sold AS (
+    SELECT s.created_by_id AS user_id,
+           count(*) FILTER (WHERE s.status = 'COMPLETED')::int                         AS sales_count,
+           count(*) FILTER (WHERE s.status = 'CANCELED')::int                          AS canceled_count,
+           coalesce(sum(s.total_cents) FILTER (WHERE s.status = 'COMPLETED'), 0)::bigint AS net
+    FROM sales s CROSS JOIN bounds b
+    WHERE ${inPeriod}
+    GROUP BY s.created_by_id
+  ),
+  ret AS (
+    -- A devolução pesa para quem fez a VENDA, na data da devolução.
+    SELECT s.created_by_id AS user_id, sum(ri.refund_cents)::bigint AS returns
+    FROM ${returnedInPeriod}
+    GROUP BY s.created_by_id
+  )
   SELECT u.id, u.name,
-         count(*) FILTER (WHERE s.status = 'COMPLETED')::int                         AS sales_count,
-         count(*) FILTER (WHERE s.status = 'CANCELED')::int                          AS canceled_count,
-         coalesce(sum(s.total_cents) FILTER (WHERE s.status = 'COMPLETED'), 0)::bigint AS net
-  FROM sales s CROSS JOIN bounds b
-  JOIN users u ON u.id = s.created_by_id
-  WHERE ${inPeriod}
-  GROUP BY u.id, u.name
+         coalesce(sold.sales_count, 0)::int    AS sales_count,
+         coalesce(sold.canceled_count, 0)::int AS canceled_count,
+         (coalesce(sold.net, 0) - coalesce(ret.returns, 0))::bigint AS net
+  FROM sold FULL JOIN ret USING (user_id)
+  JOIN users u ON u.id = coalesce(sold.user_id, ret.user_id)
   ORDER BY net DESC, u.name`;

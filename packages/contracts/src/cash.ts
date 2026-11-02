@@ -64,7 +64,9 @@ export type CashMovement = z.infer<typeof cashMovementSchema>;
 const cashTotalsSchema = z.object({
   expectedCents: z.number().int(),
   /** Vendas concluídas da sessão, por forma de pagamento (líquido de troco). */
-  byMethod: z.array(z.object({ method: z.enum(Object.keys(PAYMENT_METHODS) as [PaymentMethod]), amountCents: z.number().int() })),
+  byMethod: z.array(
+    z.object({ method: z.enum(Object.keys(PAYMENT_METHODS) as [PaymentMethod]), amountCents: z.number().int() }),
+  ),
   movements: z.array(cashMovementSchema),
 });
 

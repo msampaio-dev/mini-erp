@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { apiBalance, apiCreateProduct, apiEnsureCash, apiStockIn, brl, login } from './support/helpers.ts';
 
 test.describe('Estoque e vendas', () => {
@@ -86,5 +87,34 @@ test.describe('Estoque e vendas', () => {
     await expect(page.getByRole('alert')).toContainText('Estoque insuficiente');
     await expect(page.getByRole('heading', { name: /Venda nº/ })).toHaveCount(0);
     expect(await apiBalance(page, product.id)).toBe(1);
+  });
+
+  test('devolução parcial pela tela: reembolso proporcional, estoque de volta e a venda não pode mais ser cancelada', async ({ page }) => {
+    const product = await apiCreateProduct(page, { salePriceCents: 1000 });
+    await apiStockIn(page, product.id, 10);
+    const res = await page.request.post('/api/sales', {
+      headers: { 'Idempotency-Key': randomUUID() },
+      data: {
+        items: [{ productId: product.id, quantity: 3 }],
+        discount: { type: 'PERCENT', percent: 10 },
+        payments: [{ method: 'PIX', amountCents: 2700 }],
+      },
+    });
+    expect(res.status()).toBe(201);
+    const sale = await res.json();
+    expect(await apiBalance(page, product.id)).toBe(7);
+
+    await page.goto(`/vendas/${sale.id}`);
+    await page.getByRole('button', { name: 'Registrar devolução' }).click();
+    await page.getByLabel(`Devolver de ${product.name}`).fill('1');
+    // 1 de 3 unidades de um item de R$ 27,00 líquido (com o desconto) = R$ 9,00.
+    await expect(page.getByText('Reembolso:')).toContainText(brl('9,00'));
+    await page.getByLabel('Motivo').fill('Embalagem violada');
+    await page.getByRole('button', { name: 'Confirmar devolução' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Devoluções' })).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'Embalagem violada' })).toContainText(brl('9,00'));
+    await expect(page.getByRole('button', { name: 'Cancelar venda' })).toHaveCount(0);
+    expect(await apiBalance(page, product.id)).toBe(8);
   });
 });

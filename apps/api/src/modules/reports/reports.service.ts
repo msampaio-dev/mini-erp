@@ -37,7 +37,15 @@ export class ReportsService {
   }
 
   async sales(query: SalesReportQuery): Promise<SalesReport> {
-    type Totals = { sales_count: number; canceled_count: number; gross: bigint; discount: bigint; net: bigint; cost: bigint };
+    type Totals = {
+      sales_count: number;
+      canceled_count: number;
+      gross: bigint;
+      discount: bigint;
+      returns: bigint;
+      net: bigint;
+      cost: bigint;
+    };
     type Point = { bucket: string; sales_count: number; net: bigint; margin: bigint };
 
     const [[t], series] = await Promise.all([
@@ -54,6 +62,7 @@ export class ReportsService {
         canceledCount: num(t!.canceled_count),
         grossCents: num(t!.gross),
         discountCents: num(t!.discount),
+        returnsCents: num(t!.returns),
         netCents: net,
         costCents: num(t!.cost),
         marginCents: margin,

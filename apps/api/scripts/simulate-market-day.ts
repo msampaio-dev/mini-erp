@@ -184,8 +184,9 @@ async function main() {
     // ─── 9. Concorrência: 10 vendas simultâneas disputando 5 unidades ─────────
     const bis = 'PAD-BISNAG-SEVENBOYS';
     const bisNow = await qty(bis);
-    if (bisNow > 5) {
-      await inventory.registerAdjustment({ productId: need(bis), quantity: -(bisNow - 5), reason: 'INVENTARIO', note: 'Contagem: só restam 5' }, user.id, randomUUID());
+    // Ajusta para exatamente 5 nos dois sentidos: numa 2ª execução o saldo já começa zerado.
+    if (bisNow !== 5) {
+      await inventory.registerAdjustment({ productId: need(bis), quantity: 5 - bisNow, reason: 'INVENTARIO', note: 'Contagem: restam 5' }, user.id, randomUUID());
     }
     const race = await Promise.allSettled(Array.from({ length: 10 }, () => sell([[bis, 1]], 'PIX')));
     const won = race.filter((r) => r.status === 'fulfilled').length;
@@ -210,12 +211,28 @@ async function main() {
     check('11. Relatório de reposição', !!inReorder && inReorder.quantity === 0,
       `${reorder.length} produto(s) para repor; Bisnaguinha: saldo ${inReorder?.quantity}, faltam ${inReorder?.missing}`);
 
-    // ─── 12. Fechamento do caixa: esperado = troco + dinheiro das vendas ───────
+    // ─── 12. Devolução parcial: 1 dos 2 cafés da venda com 10% de desconto ────
+    const cafeItem = pct.items.find((i) => i.sku === 'CAFE-3COR-500')!;
+    const cafeBefore = await qty('CAFE-3COR-500');
+    const devolvida = (
+      await sales.createReturn(
+        pct.id,
+        { items: [{ productId: cafeItem.productId, quantity: 1 }], reason: 'Simulação: cliente trocou de marca', refundMethod: 'PIX', restock: true },
+        user.id,
+        randomUUID(),
+      )
+    ).sale;
+    const refund = devolvida.returns.at(-1)!.refundCents;
+    check('12. Devolução parcial',
+      refund === Math.round(cafeItem.netCents / 2) && (await qty('CAFE-3COR-500')) === cafeBefore + 1,
+      `1 de 2 cafés (líquido do item ${brl(cafeItem.netCents)}) → reembolso ${brl(refund)} no Pix; estoque ${cafeBefore} → ${cafeBefore + 1}`);
+
+    // ─── 13. Fechamento do caixa: esperado = troco + dinheiro das vendas ───────
     // Conta "perfeita": a simulação é o sistema, então conta exatamente o esperado (diferença zero).
     const counted = (await cashier.get(session.id, auth)).totals!.expectedCents;
     const closed = await cashier.close(session.id, { countedCents: counted, note: 'Fechamento da simulação' }, auth);
     const cashSales = await prisma.cashMovement.aggregate({ where: { sessionId: session.id, type: 'SALE' }, _sum: { amountCents: true } });
-    check('12. Fechamento do caixa',
+    check('13. Fechamento do caixa',
       closed.totals!.expectedCents === session.openingCents + (cashSales._sum.amountCents ?? 0) &&
         closed.totals!.expectedCents === session.openingCents + cash.totalCents && closed.differenceCents === 0,
       `troco ${brl(session.openingCents)} + dinheiro das vendas ${brl(cashSales._sum.amountCents ?? 0)} = esperado ${brl(closed.totals!.expectedCents)}`);

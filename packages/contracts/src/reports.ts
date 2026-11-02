@@ -68,6 +68,8 @@ export const salesReportSchema = z.object({
     canceledCount: z.number().int(),
     grossCents: money,
     discountCents: money,
+    /** Devoluções feitas no período (ADR 0019): já descontadas da receita líquida. */
+    returnsCents: money,
     netCents: money,
     costCents: money,
     marginCents: money,

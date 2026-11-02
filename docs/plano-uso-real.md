@@ -53,7 +53,7 @@ Em ordem de prioridade para um mercado:
    tem explicação.
 2. ✅ **Formas de pagamento** (ADR 0018): dinheiro (com troco), PIX e cartão, inclusive pagamento dividido.
    Primeiro registramos o que a maquininha aprovou; integração TEF fica para depois.
-3. **Devolução e troca parciais:** hoje só existe cancelamento da venda inteira. A devolução
+3. ✅ **Devolução parcial** (ADR 0019; a troca é devolução + venda nova): hoje só existe cancelamento da venda inteira. A devolução
    gera entrada no livro-razão, como o estorno já faz.
 4. **Impressão do cupom** em impressora térmica de 80 mm (página de impressão do navegador, sem
    driver especial).

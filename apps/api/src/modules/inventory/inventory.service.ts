@@ -149,6 +149,9 @@ export class InventoryService {
       if (original.type === 'SALE') {
         throw new BadRequestException({ code: 'NOT_REVERSIBLE', message: 'Saídas de venda são desfeitas cancelando a venda' });
       }
+      if (original.type === 'RETURN') {
+        throw new BadRequestException({ code: 'NOT_REVERSIBLE', message: 'Devoluções de cliente não se estornam pelo estoque' });
+      }
       if (original.reversedBy) this.alreadyReversed();
 
       const wasInflow = original.quantity.isPositive();
@@ -234,6 +237,27 @@ export class InventoryService {
       note: args.note,
       balanceAfter: balance.quantity,
       reversalOfId: args.movementId,
+      createdById: args.userId,
+    });
+  }
+
+  /**
+   * Mercadoria devolvida pelo cliente volta ao estoque (ADR 0019). Tipo próprio (RETURN), e não
+   * estorno: uma saída de venda pode ter várias devoluções parciais, e o estorno é único por
+   * movimentação. Entra ao custo médio atual, como o cancelamento.
+   */
+  async recordReturnInflow(
+    tx: Prisma.TransactionClient,
+    args: { productId: string; quantity: number; userId: string; note: string },
+  ): Promise<string> {
+    const qty = toQty(args.quantity);
+    const balance = await ledger.inflowAtCurrentCost(tx, args.productId, qty);
+    return this.insertMovement(tx, {
+      productId: args.productId,
+      type: 'RETURN',
+      quantity: qty,
+      note: args.note,
+      balanceAfter: balance.quantity,
       createdById: args.userId,
     });
   }

@@ -14,6 +14,8 @@ export const PERMISSIONS = {
   'vendas:ler': 'Consultar vendas',
   'vendas:cancelar': 'Cancelar vendas',
   'relatorios:ler': 'Acessar relatórios',
+  'caixa:operar': 'Abrir, movimentar e fechar o próprio caixa',
+  'caixa:gerenciar': 'Ver todos os caixas, com valores esperados e diferenças',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

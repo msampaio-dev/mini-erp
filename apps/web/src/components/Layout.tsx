@@ -9,7 +9,8 @@ export function Layout() {
       <header className="topbar">
         <strong className="brand">Mini-ERP</strong>
         <nav>
-          {can('vendas:criar') && <NavLink to="/vendas/nova">Caixa</NavLink>}
+          {can('vendas:criar') && <NavLink to="/vendas/nova">PDV</NavLink>}
+          {can('caixa:operar') && <NavLink to="/caixa">Caixa</NavLink>}
           {can('vendas:ler') && (
             <NavLink to="/vendas" end>
               Vendas

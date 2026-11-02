@@ -4,14 +4,28 @@
     {
       "name": "api",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:api"],
+      "runtimeArgs": [
+        "run",
+        "dev:api"
+      ],
       "port": 3000
     },
     {
       "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:web"],
+      "runtimeArgs": [
+        "run",
+        "dev:web"
+      ],
       "port": 5180
+    },
+    {
+      "name": "ui-teste",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "apps/e2e/server.mjs"
+      ],
+      "port": 3200
     }
   ]
 }

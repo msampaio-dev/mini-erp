@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { formatCents, PAYMENT_METHODS, SALE_STATUSES, type SaleStatus } from '@mini-erp/contracts'
+import { formatCents, SALE_STATUSES, type SaleStatus } from '@mini-erp/contracts'
 import { useAuth } from '../../auth/auth-context.ts'
 import { useSales, type SaleListParams } from '../../lib/sales-queries.ts'
+import { describePayments } from './payments.ts'
 import { SaleStatusBadge } from './SaleStatusBadge.tsx'
 
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -100,7 +101,7 @@ export function SalesListPage() {
                     <td>{dateTime.format(new Date(s.createdAt))}</td>
                     <td>{s.createdBy.name}</td>
                     <td className="num">{s.itemCount}</td>
-                    <td>{PAYMENT_METHODS[s.paymentMethod]}</td>
+                    <td>{describePayments(s.payments)}</td>
                     <td className="num">{formatCents(s.totalCents)}</td>
                     <td>
                       <SaleStatusBadge status={s.status} />

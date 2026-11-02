@@ -46,11 +46,17 @@ export const createSaleSchema = z.object({
       message: 'Produto repetido: ajuste a quantidade em uma única linha',
     }),
   discount: saleDiscountSchema.nullable().default(null),
-  payment: z.object({
-    method: z.enum(PAYMENT_KEYS),
-    /** Valor entregue pelo cliente, só para dinheiro (cálculo de troco). */
-    receivedCents: centsSchema.optional(),
-  }),
+  /**
+   * Pagamento dividido (D45): um valor por meio. Em dinheiro, o valor é o ENTREGUE pelo cliente
+   * (o troco sai dele); nos demais, nunca passa do que falta pagar.
+   */
+  payments: z
+    .array(z.object({ method: z.enum(PAYMENT_KEYS), amountCents: centsSchema }))
+    .min(1, 'Informe a forma de pagamento')
+    .max(PAYMENT_KEYS.length)
+    .refine((list) => new Set(list.map((p) => p.method)).size === list.length, {
+      message: 'Forma de pagamento repetida: some os valores numa linha só',
+    }),
   note: z.string().trim().max(500).default(''),
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
@@ -61,6 +67,9 @@ export const cancelSaleSchema = z.object({
 export type CancelSaleInput = z.infer<typeof cancelSaleSchema>;
 
 const userRefSchema = z.object({ id: z.uuid(), name: z.string() });
+
+export const salePaymentSchema = z.object({ method: z.enum(PAYMENT_KEYS), amountCents: z.number().int() });
+export type SalePayment = z.infer<typeof salePaymentSchema>;
 
 export const saleItemSchema = z.object({
   productId: z.uuid(),
@@ -84,10 +93,12 @@ export const saleSchema = z.object({
   subtotalCents: z.number().int(),
   discountCents: z.number().int(),
   totalCents: z.number().int(),
-  paymentMethod: z.enum(PAYMENT_KEYS),
+  payments: z.array(salePaymentSchema),
   receivedCents: z.number().int(),
   changeCents: z.number().int(),
   note: z.string(),
+  /** Sessão de caixa em que a venda foi registrada (null nas vendas anteriores ao controle de caixa). */
+  cashSessionId: z.uuid().nullable(),
   createdBy: userRefSchema,
   createdAt: z.iso.datetime(),
   canceledAt: z.iso.datetime().nullable(),
@@ -97,7 +108,7 @@ export const saleSchema = z.object({
 export type Sale = z.infer<typeof saleSchema>;
 
 export const saleSummarySchema = saleSchema
-  .omit({ items: true, note: true, cancelReason: true, canceledBy: true })
+  .omit({ items: true, note: true, cancelReason: true, canceledBy: true, cashSessionId: true })
   .extend({ itemCount: z.number().int() });
 export type SaleSummary = z.infer<typeof saleSummarySchema>;
 

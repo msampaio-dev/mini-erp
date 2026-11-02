@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { apiBalance, apiCreateProduct, apiStockIn, brl, login } from './support/helpers.ts';
+import { apiBalance, apiCreateProduct, apiEnsureCash, apiStockIn, brl, login } from './support/helpers.ts';
 
 test.describe('Estoque e vendas', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
+    await apiEnsureCash(page);
   });
 
   test('entrada de estoque pela tela atualiza saldo e custo médio', async ({ page }) => {
@@ -36,8 +37,8 @@ test.describe('Estoque e vendas', () => {
 
     await page.getByRole('combobox').first().selectOption('PERCENT'); // Desconto
     await page.getByLabel('Valor do desconto').fill('10');
-    await page.getByLabel('Pagamento').selectOption('CASH');
-    await page.getByLabel('Valor recebido (R$)').fill('50,00');
+    await page.getByLabel('Forma de pagamento 1').selectOption('CASH');
+    await page.getByLabel('Valor em Dinheiro').fill('50,00');
     // 2 × 12,50 = 25,00; 10% = 2,50; total 22,50; troco 27,50 (prévia já na tela)
     await expect(page.locator('dd.grand')).toHaveText(brl('22,50'));
 

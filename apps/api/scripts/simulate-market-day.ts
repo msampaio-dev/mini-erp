@@ -12,9 +12,10 @@
  */
 import { NestFactory } from '@nestjs/core';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { computeSaleTotals, type CreateSaleInput, type PaymentMethod } from '@mini-erp/contracts';
+import { computeSaleTotals, type CreateSaleInput, type PaymentMethod, type Permission } from '@mini-erp/contracts';
 import { AppModule } from '../dist/app.module.js';
 import { PrismaService } from '../dist/infra/prisma/prisma.service.js';
+import { CashService } from '../dist/modules/cash/cash.service.js';
 import { ProductsService } from '../dist/modules/catalog/products/products.service.js';
 import { InventoryService } from '../dist/modules/inventory/inventory.service.js';
 import { SalesService } from '../dist/modules/sales/sales.service.js';
@@ -37,6 +38,7 @@ async function main() {
     const inventory = app.get(InventoryService);
     const sales = app.get(SalesService);
     const reports = app.get(ReportsService);
+    const cashier = app.get(CashService);
 
     const user = await prisma.user.upsert({
       where: { email: 'simulacao@sistema.local' },
@@ -49,8 +51,18 @@ async function main() {
       },
     });
 
-    const all = await prisma.product.findMany({ select: { id: true, sku: true } });
+    const all = await prisma.product.findMany({ select: { id: true, sku: true, salePriceCents: true } });
     const id = new Map(all.map((p) => [p.sku, p.id]));
+    const price = new Map(all.map((p) => [p.sku, p.salePriceCents]));
+
+    // Toda venda exige caixa aberto (ADR 0018): a simulação abre o seu, com R$ 200 de troco.
+    const auth = {
+      sessionId: 'simulacao',
+      user: { id: user.id, name: user.name, email: user.email },
+      roles: [],
+      permissions: new Set<Permission>(['caixa:operar', 'caixa:gerenciar']),
+    };
+    const session = (await cashier.current(auth)) ?? (await cashier.open({ openingCents: 20_000, note: 'Simulação' }, auth));
     const need = (sku: string) => {
       const v = id.get(sku);
       if (!v) throw new Error(`Produto ${sku} não encontrado: rode antes o seed:demo`);
@@ -58,12 +70,15 @@ async function main() {
     };
     const qty = async (sku: string) => (await inventory.getBalances([need(sku)]))[0]!.quantity;
     const avg = async (sku: string) => (await inventory.getBalances([need(sku)]))[0]!.avgCostCents;
+    // Paga exatamente o total no meio indicado (o total sai da mesma conta que a API faz).
+    const totalOf = (lines: Line[], discount: CreateSaleInput['discount'] = null) =>
+      computeSaleTotals(lines.map(([sku, quantity]) => ({ quantity, unitPriceCents: price.get(sku) ?? 0 })), discount).totalCents;
     const sell = (lines: Line[], method: PaymentMethod, extra: Partial<CreateSaleInput> = {}, key = randomUUID()) =>
       sales.create(
         {
           items: lines.map(([sku, quantity]) => ({ productId: need(sku), quantity })),
           discount: null,
-          payment: { method },
+          payments: [{ method, amountCents: totalOf(lines, extra.discount) }],
           note: 'Simulação de testes',
           ...extra,
         } as CreateSaleInput,
@@ -109,7 +124,7 @@ async function main() {
     const kgLines: Line[] = [['HORT-BANANA-PRATA', 1.235], ['ACG-PATINHO', 0.875], ['PAD-PAO-FRANCES', 0.45], ['FRIO-MUSSARELA-KG', 0.3]];
     const prices = new Map((await products.getMany(kgLines.map(([s]) => need(s)))).map((p) => [p.id, p.salePriceCents]));
     const expected = computeSaleTotals(kgLines.map(([s, q]) => ({ quantity: q, unitPriceCents: prices.get(need(s))! })));
-    const cash = await sell(kgLines, 'CASH', { payment: { method: 'CASH', receivedCents: 10_000 } });
+    const cash = await sell(kgLines, 'CASH', { payments: [{ method: 'CASH', amountCents: 10_000 }] });
     const bananaAfter = await qty('HORT-BANANA-PRATA');
     check('3. Pesáveis + dinheiro com troco',
       cash.totalCents === expected.totalCents && cash.changeCents === 10_000 - cash.totalCents &&
@@ -194,6 +209,16 @@ async function main() {
     const inReorder = reorder.find((r) => r.sku === bis);
     check('11. Relatório de reposição', !!inReorder && inReorder.quantity === 0,
       `${reorder.length} produto(s) para repor; Bisnaguinha: saldo ${inReorder?.quantity}, faltam ${inReorder?.missing}`);
+
+    // ─── 12. Fechamento do caixa: esperado = troco + dinheiro das vendas ───────
+    // Conta "perfeita": a simulação é o sistema, então conta exatamente o esperado (diferença zero).
+    const counted = (await cashier.get(session.id, auth)).totals!.expectedCents;
+    const closed = await cashier.close(session.id, { countedCents: counted, note: 'Fechamento da simulação' }, auth);
+    const cashSales = await prisma.cashMovement.aggregate({ where: { sessionId: session.id, type: 'SALE' }, _sum: { amountCents: true } });
+    check('12. Fechamento do caixa',
+      closed.totals!.expectedCents === session.openingCents + (cashSales._sum.amountCents ?? 0) &&
+        closed.totals!.expectedCents === session.openingCents + cash.totalCents && closed.differenceCents === 0,
+      `troco ${brl(session.openingCents)} + dinheiro das vendas ${brl(cashSales._sum.amountCents ?? 0)} = esperado ${brl(closed.totals!.expectedCents)}`);
 
     // ─── Resumo do dia ────────────────────────────────────────────────────────
     const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });

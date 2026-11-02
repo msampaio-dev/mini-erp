@@ -82,3 +82,28 @@ export function computeSaleTotals(
     totalCents: subtotalCents - totalDiscount,
   };
 }
+
+export type PaymentLine = { method: 'CASH' | 'PIX' | 'DEBIT' | 'CREDIT'; amountCents: number };
+
+export interface PaymentSettlement {
+  receivedCents: number;
+  changeCents: number;
+  /** Quanto de dinheiro FICA na gaveta: entregue em dinheiro − troco. */
+  cashNetCents: number;
+}
+
+/**
+ * Fecha a conta de um pagamento dividido (D45). Duas regras bastam:
+ * 1. Cartão e Pix somados não passam do total: troco só existe em dinheiro.
+ * 2. Tudo somado cobre o total.
+ * Com elas, o troco (recebido − total) nunca passa do valor entregue em dinheiro.
+ * Lança RangeError com a mensagem para o usuário.
+ */
+export function settlePayments(totalCents: number, payments: PaymentLine[]): PaymentSettlement {
+  const cash = payments.find((p) => p.method === 'CASH')?.amountCents ?? 0;
+  const received = payments.reduce((a, p) => a + p.amountCents, 0);
+  if (received - cash > totalCents) throw new RangeError('Cartão e Pix não podem passar do total: troco só em dinheiro');
+  if (received < totalCents) throw new RangeError('Valor pago menor que o total');
+  const changeCents = received - totalCents;
+  return { receivedCents: received, changeCents, cashNetCents: cash - changeCents };
+}

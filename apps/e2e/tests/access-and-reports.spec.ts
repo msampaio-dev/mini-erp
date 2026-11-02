@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { apiCreateProduct, apiStockIn, login, unique } from './support/helpers.ts';
+import { apiCreateProduct, apiEnsureCash, apiStockIn, login, unique } from './support/helpers.ts';
 
 test.describe('Permissões e conta', () => {
   test('admin cria um vendedor; o vendedor não vê nem acessa telas gerenciais', async ({ page }) => {
@@ -58,9 +58,10 @@ test.describe('Relatórios', () => {
     await login(page);
     const product = await apiCreateProduct(page, { salePriceCents: 4000 });
     await apiStockIn(page, product.id, 5, 2500);
+    await apiEnsureCash(page);
     const sale = await page.request.post('/api/sales', {
       headers: { 'Idempotency-Key': randomUUID() },
-      data: { items: [{ productId: product.id, quantity: 1 }], payment: { method: 'PIX' } },
+      data: { items: [{ productId: product.id, quantity: 1 }], payments: [{ method: 'PIX', amountCents: 4000 }] },
     });
     expect(sale.status()).toBe(201);
 

@@ -48,10 +48,10 @@ o PDV bloqueia a venda de produto sem dados fiscais.
 
 Em ordem de prioridade para um mercado:
 
-1. **Caixa:** abertura com troco, sangria, suprimento e fechamento com conferência (esperado ×
+1. ✅ **Caixa** (ADR 0018): abertura com troco, sangria, suprimento e fechamento com conferência (esperado ×
    contado). Toda venda pertence a uma sessão de caixa. Sem isso, a diferença no fim do dia não
    tem explicação.
-2. **Formas de pagamento:** dinheiro (com troco), PIX e cartão, inclusive pagamento dividido.
+2. ✅ **Formas de pagamento** (ADR 0018): dinheiro (com troco), PIX e cartão, inclusive pagamento dividido.
    Primeiro registramos o que a maquininha aprovou; integração TEF fica para depois.
 3. **Devolução e troca parciais:** hoje só existe cancelamento da venda inteira. A devolução
    gera entrada no livro-razão, como o estorno já faz.

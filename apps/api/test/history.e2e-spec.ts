@@ -4,7 +4,7 @@ import type { MarginRow, Product } from '@mini-erp/contracts';
 import type TestAgent from 'supertest/lib/agent.js';
 import type { App } from 'supertest/types.js';
 import type { PrismaService } from '../src/infra/prisma/prisma.service.js';
-import { createTestApp, createUser, loginAs, resetDatabase } from './support/test-app.js';
+import { createTestApp, createUser, loginAs, openCash, PAYS_WITH_PLENTY, resetDatabase } from './support/test-app.js';
 
 describe('Histórico de categoria e trava de unidade (e2e)', () => {
   let app: INestApplication<App>;
@@ -19,6 +19,7 @@ describe('Histórico de categoria e trava de unidade (e2e)', () => {
     await resetDatabase(prisma);
     await createUser(prisma, 'gerente@teste.com', ['GERENTE']);
     gerente = await loginAs(app, 'gerente@teste.com');
+    await openCash(gerente);
   });
 
   afterAll(async () => {
@@ -32,7 +33,7 @@ describe('Histórico de categoria e trava de unidade (e2e)', () => {
     gerente
       .post('/api/sales')
       .set('Idempotency-Key', randomUUID())
-      .send({ items: [{ productId, quantity }], payment: { method: 'PIX' } })
+      .send({ items: [{ productId, quantity }], payments: PAYS_WITH_PLENTY })
       .expect(201);
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
   const marginByCategory = async () =>

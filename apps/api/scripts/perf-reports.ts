@@ -78,14 +78,16 @@ async function seed() {
      WHERE n < 1 + s.g % 5`,
     `INSERT INTO stock_movements (id, product_id, type, quantity, balance_after, created_by_id, created_at, note)
      SELECT movement_id, product_id, 'SALE', -qty, 0, seller, created_at, 'perf' FROM gen_items`,
-    `INSERT INTO sales (id, subtotal_cents, discount_cents, total_cents, payment_method, received_cents, change_cents,
+    `INSERT INTO sales (id, subtotal_cents, discount_cents, total_cents, received_cents, change_cents,
                         created_by_id, created_at, status, canceled_at, canceled_by_id, cancel_reason)
-     SELECT s.id, t.total, 0, t.total, 'PIX', t.total, 0, s.seller, s.created_at,
+     SELECT s.id, t.total, 0, t.total, t.total, 0, s.seller, s.created_at,
             CASE WHEN s.canceled THEN 'CANCELED' ELSE 'COMPLETED' END::"SaleStatus",
             CASE WHEN s.canceled THEN s.created_at END,
             CASE WHEN s.canceled THEN s.seller END,
             CASE WHEN s.canceled THEN 'perf' END
      FROM gen_sales s JOIN (SELECT sale_id, sum(qty * price) AS total FROM gen_items GROUP BY sale_id) t ON t.sale_id = s.id`,
+    // Pagamento (D45): a soma dos pagamentos tem de bater com o recebido (trigger conferido no COMMIT).
+    `INSERT INTO sale_payments (id, sale_id, method, amount_cents) SELECT gen_random_uuid(), id, 'PIX', received_cents FROM sales`,
     `INSERT INTO sale_items (id, sale_id, position, product_id, sku, name, unit, quantity, unit_price_cents,
                              gross_cents, discount_cents, net_cents, unit_cost_cents, stock_movement_id)
      SELECT gen_random_uuid(), i.sale_id, i.position, i.product_id, p.sku, p.name, p.unit, i.qty, i.price,

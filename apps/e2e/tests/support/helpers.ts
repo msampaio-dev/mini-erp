@@ -46,6 +46,14 @@ export async function apiStockIn(page: Page, productId: string, quantity: number
   expect(res.status(), await res.text()).toBe(201);
 }
 
+/** Toda venda exige caixa aberto (ADR 0018). O admin dos testes mantém um caixa aberto entre os testes. */
+export async function apiEnsureCash(page: Page) {
+  const current = await page.request.get('/api/cash/current');
+  if ((await current.json()).session) return;
+  const res = await page.request.post('/api/cash/open', { data: { openingCents: 0 } });
+  expect(res.status(), await res.text()).toBe(201);
+}
+
 export async function apiBalance(page: Page, productId: string): Promise<number> {
   const res = await page.request.get(`/api/inventory/balances?productIds=${productId}`);
   return (await res.json())[0].quantity;

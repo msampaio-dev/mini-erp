@@ -21,8 +21,8 @@ export const ROLE_DEFINITIONS: Record<RoleKey, RoleDefinition> = {
   },
   VENDEDOR: {
     name: 'Vendedor',
-    description: 'Registra e consulta vendas',
-    permissions: ['produtos:ler', 'estoque:ler', 'vendas:criar', 'vendas:ler'],
+    description: 'Opera o caixa: registra e consulta vendas',
+    permissions: ['produtos:ler', 'estoque:ler', 'vendas:criar', 'vendas:ler', 'caixa:operar'],
   },
   ESTOQUISTA: {
     name: 'Estoquista',

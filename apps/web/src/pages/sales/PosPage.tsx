@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import {
+  centsToInput,
   computeSaleTotals,
   createSaleSchema,
   formatCents,
@@ -8,16 +9,19 @@ import {
   parseBrlToCents,
   PAYMENT_METHODS,
   productPageSchema,
+  settlePayments,
   type PaymentMethod,
   type Product,
   type Sale,
   type SaleDiscount,
 } from '@mini-erp/contracts'
 import { apiGet, toQueryString } from '../../lib/api.ts'
+import { useCurrentCash } from '../../lib/cash-queries.ts'
 import { useBalances } from '../../lib/inventory-queries.ts'
 import { formatQuantity, parseQuantity } from '../../lib/quantity.ts'
 import { useCreateSale } from '../../lib/sales-queries.ts'
 import { useIdempotencyKey } from '../../lib/use-idempotency-key.ts'
+import { describePayments } from './payments.ts'
 
 interface CartLine {
   product: Product
@@ -26,16 +30,39 @@ interface CartLine {
 
 type DiscountMode = 'NONE' | 'AMOUNT' | 'PERCENT'
 
-/** Ponto de venda: busca/leitor de código de barras, carrinho, desconto, pagamento. */
+interface PaymentLine {
+  method: PaymentMethod
+  /** Vazio = "o que falta pagar": no caso comum (um meio só) o operador não digita nada. */
+  amount: string
+}
+
+/** Sem caixa aberto não há venda (D44): o PDV manda abrir o caixa primeiro. */
 export function PosPage() {
+  const cash = useCurrentCash()
+  if (cash.isPending) return <p className="muted">Carregando…</p>
+  if (!cash.isError && !cash.data) {
+    return (
+      <section className="empty">
+        <h1>Caixa fechado</h1>
+        <p className="muted">Abra o seu caixa, com o troco inicial, antes de vender.</p>
+        <Link to="/caixa" className="button">
+          Abrir caixa
+        </Link>
+      </section>
+    )
+  }
+  return <Pos />
+}
+
+/** Ponto de venda: busca/leitor de código de barras, carrinho, desconto, pagamento. */
+function Pos() {
   const [cart, setCart] = useState<CartLine[]>([])
   const [search, setSearch] = useState('')
   const [results, setResults] = useState<Product[] | null>(null)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [discountMode, setDiscountMode] = useState<DiscountMode>('NONE')
   const [discountText, setDiscountText] = useState('')
-  const [method, setMethod] = useState<PaymentMethod>('PIX')
-  const [receivedText, setReceivedText] = useState('')
+  const [payments, setPayments] = useState<PaymentLine[]>([{ method: 'PIX', amount: '' }])
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<Sale | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -104,8 +131,28 @@ export function PosPage() {
   } catch (err) {
     previewError = err instanceof Error ? err.message : 'Desconto inválido'
   }
-  const receivedCents = method === 'CASH' ? parseBrlToCents(receivedText) : null
-  const change = preview && receivedCents !== null ? receivedCents - preview.totalCents : null
+  // Pagamento dividido (D45): a linha em branco recebe o que falta; a regra é a mesma do servidor.
+  const typed = payments.map((p) => (p.amount.trim() === '' ? null : parseBrlToCents(p.amount)))
+  const invalidAmount = payments.some((p, i) => p.amount.trim() !== '' && typed[i] === null)
+  const typedSum = typed.reduce<number>((a, c) => a + (c ?? 0), 0)
+  const remaining = preview ? Math.max(preview.totalCents - typedSum, 0) : 0
+  // O "que falta" vai para a ÚLTIMA linha em branco; as outras em branco ficam zeradas.
+  const lastBlank = typed.lastIndexOf(null)
+  const paymentInput = payments.map((p, i) => ({
+    method: p.method,
+    amountCents: typed[i] ?? (i === lastBlank ? remaining : 0),
+  }))
+  let settlement: ReturnType<typeof settlePayments> | null = null
+  let paymentError: string | null = null
+  if (preview && !invalidAmount) {
+    try {
+      settlement = settlePayments(preview.totalCents, paymentInput)
+    } catch (err) {
+      paymentError = err instanceof Error ? err.message : 'Pagamento inválido'
+    }
+  }
+  const allMethods = Object.keys(PAYMENT_METHODS) as PaymentMethod[]
+  const unusedMethods = allMethods.filter((m) => !payments.some((p) => p.method === m))
 
   async function finish() {
     setError(null)
@@ -116,7 +163,7 @@ export function PosPage() {
     const parsed = createSaleSchema.safeParse({
       items: parsedLines.map(({ line, qty }) => ({ productId: line.product.id, quantity: qty })),
       discount,
-      payment: { method, ...(receivedCents !== null && { receivedCents }) },
+      payments: paymentInput,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Dados inválidos')
@@ -136,8 +183,7 @@ export function PosPage() {
     setCart([])
     setDiscountMode('NONE')
     setDiscountText('')
-    setMethod('PIX')
-    setReceivedText('')
+    setPayments([{ method: 'PIX', amount: '' }])
     setError(null)
     setDone(null)
     renewKey() // só aqui a chave muda: a operação anterior terminou com sucesso
@@ -151,10 +197,7 @@ export function PosPage() {
         <p className="total-line">
           Total <strong>{formatCents(done.totalCents)}</strong>
         </p>
-        <p className="muted">
-          {PAYMENT_METHODS[done.paymentMethod]}
-          {done.paymentMethod === 'CASH' && ` · recebido ${formatCents(done.receivedCents)}`}
-        </p>
+        <p className="muted">{describePayments(done.payments)}</p>
         {done.changeCents > 0 && (
           <p className="change">
             Troco: <strong>{formatCents(done.changeCents)}</strong>
@@ -287,22 +330,56 @@ export function PosPage() {
           </div>
         </label>
 
-        <label>
-          Pagamento
-          <select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
-            {Object.entries(PAYMENT_METHODS).map(([k, label]) => (
-              <option key={k} value={k}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {method === 'CASH' && (
-          <label>
-            Valor recebido (R$)
-            <input inputMode="decimal" value={receivedText} onChange={(e) => setReceivedText(e.target.value)} />
-          </label>
-        )}
+        <fieldset className="plain">
+          <legend>Pagamento</legend>
+          {payments.map((p, i) => (
+            <div className="payment-line" key={p.method}>
+              <select
+                aria-label={`Forma de pagamento ${i + 1}`}
+                value={p.method}
+                onChange={(e) =>
+                  setPayments((list) => list.map((l) => (l === p ? { ...l, method: e.target.value as PaymentMethod } : l)))
+                }
+              >
+                {allMethods
+                  .filter((m) => m === p.method || unusedMethods.includes(m))
+                  .map((m) => (
+                    <option key={m} value={m}>
+                      {PAYMENT_METHODS[m]}
+                    </option>
+                  ))}
+              </select>
+              <input
+                inputMode="decimal"
+                aria-label={`Valor em ${PAYMENT_METHODS[p.method]}`}
+                placeholder={i === lastBlank ? centsToInput(remaining) : '0,00'}
+                value={p.amount}
+                onChange={(e) => setPayments((list) => list.map((l) => (l === p ? { ...l, amount: e.target.value } : l)))}
+              />
+              {payments.length > 1 ? (
+                <button
+                  type="button"
+                  className="secondary small"
+                  aria-label={`Remover ${PAYMENT_METHODS[p.method]}`}
+                  onClick={() => setPayments((list) => list.filter((l) => l !== p))}
+                >
+                  ×
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
+          ))}
+          {unusedMethods.length > 0 && (
+            <button
+              type="button"
+              className="secondary small"
+              onClick={() => setPayments((list) => [...list, { method: unusedMethods[0]!, amount: '' }])}
+            >
+              Dividir pagamento
+            </button>
+          )}
+        </fieldset>
 
         <dl className="totals">
           <dt>Subtotal</dt>
@@ -311,15 +388,16 @@ export function PosPage() {
           <dd>{preview ? `− ${formatCents(preview.discountCents)}` : '—'}</dd>
           <dt className="grand">Total</dt>
           <dd className="grand">{preview ? formatCents(preview.totalCents) : '—'}</dd>
-          {change !== null && (
+          {settlement && settlement.changeCents > 0 && (
             <>
               <dt>Troco</dt>
-              <dd className={change < 0 ? 'down' : undefined}>{formatCents(Math.max(change, 0))}</dd>
+              <dd>{formatCents(settlement.changeCents)}</dd>
             </>
           )}
         </dl>
         {previewError && <p className="error">{previewError}</p>}
-        {change !== null && change < 0 && <p className="error">Valor recebido menor que o total</p>}
+        {invalidAmount && <p className="error">Valor de pagamento inválido</p>}
+        {cart.length > 0 && paymentError && <p className="error">{paymentError}</p>}
         {error && (
           <p className="error" role="alert">
             {error}
@@ -329,7 +407,7 @@ export function PosPage() {
         <button
           type="button"
           className="finish"
-          disabled={cart.length === 0 || createSale.isPending || previewError !== null}
+          disabled={cart.length === 0 || createSale.isPending || previewError !== null || settlement === null}
           onClick={() => void finish()}
         >
           {createSale.isPending ? 'Finalizando…' : 'Finalizar venda'}

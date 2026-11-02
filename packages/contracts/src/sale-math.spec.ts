@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocateProportionally, computeSaleTotals, discountCents, lineGrossCents } from './sale-math.js';
+import { allocateProportionally, computeSaleTotals, discountCents, lineGrossCents, settlePayments } from './sale-math.js';
 import { createSaleSchema } from './sales.js';
 
 describe('lineGrossCents', () => {
@@ -88,7 +88,7 @@ describe('createSaleSchema', () => {
         { productId, quantity: 1 },
         { productId, quantity: 2 },
       ],
-      payment: { method: 'PIX' },
+      payments: [{ method: 'PIX', amountCents: 1000 }],
     });
     expect(r.success).toBe(false);
   });
@@ -96,8 +96,40 @@ describe('createSaleSchema', () => {
   it('ignora qualquer preço enviado pelo cliente', () => {
     const r = createSaleSchema.parse({
       items: [{ productId, quantity: 1, unitPriceCents: 1 }],
-      payment: { method: 'PIX' },
+      payments: [{ method: 'PIX', amountCents: 1000 }],
     });
     expect(r.items[0]).not.toHaveProperty('unitPriceCents');
+  });
+});
+
+describe('settlePayments (pagamento dividido, D45)', () => {
+  it('só dinheiro: troco = entregue − total; fica na gaveta só o total', () => {
+    expect(settlePayments(2000, [{ method: 'CASH', amountCents: 5000 }])).toEqual({ receivedCents: 5000, changeCents: 3000, cashNetCents: 2000 });
+  });
+
+  it('Pix + dinheiro: o troco sai do dinheiro', () => {
+    const r = settlePayments(2000, [
+      { method: 'PIX', amountCents: 1500 },
+      { method: 'CASH', amountCents: 1000 },
+    ]);
+    expect(r).toEqual({ receivedCents: 2500, changeCents: 500, cashNetCents: 500 });
+  });
+
+  it('cartão + Pix exatos, sem dinheiro', () => {
+    const r = settlePayments(2000, [
+      { method: 'CREDIT', amountCents: 1200 },
+      { method: 'PIX', amountCents: 800 },
+    ]);
+    expect(r).toEqual({ receivedCents: 2000, changeCents: 0, cashNetCents: 0 });
+  });
+
+  it('recusa pagar a menos e troco fora do dinheiro', () => {
+    expect(() => settlePayments(2000, [{ method: 'CASH', amountCents: 1999 }])).toThrow('Valor pago menor que o total');
+    expect(() =>
+      settlePayments(2000, [
+        { method: 'DEBIT', amountCents: 1500 },
+        { method: 'PIX', amountCents: 1000 },
+      ]),
+    ).toThrow(/troco só em dinheiro/);
   });
 });

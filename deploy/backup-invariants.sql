@@ -27,5 +27,20 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'saldo de estoque diferente da soma do livro-razão';
   END IF;
+  -- Pagamento dividido (ADR 0018): a soma dos pagamentos é o valor recebido.
+  IF EXISTS (
+    SELECT 1 FROM sales s
+    WHERE s.received_cents <> (SELECT coalesce(sum(p.amount_cents), 0) FROM sale_payments p WHERE p.sale_id = s.id)
+  ) THEN
+    RAISE EXCEPTION 'venda cujos pagamentos não somam o valor recebido';
+  END IF;
+  -- O esperado gravado no fechamento de cada caixa é a soma do livro do caixa.
+  IF EXISTS (
+    SELECT 1 FROM cash_sessions c
+    WHERE c.closed_at IS NOT NULL
+      AND c.expected_cents <> (SELECT coalesce(sum(m.amount_cents), 0) FROM cash_movements m WHERE m.session_id = c.id)
+  ) THEN
+    RAISE EXCEPTION 'caixa fechado cujo esperado não bate com as movimentações';
+  END IF;
   RAISE NOTICE 'backup restaurado e consistente';
 END $$;

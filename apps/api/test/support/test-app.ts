@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import type { RoleKey } from '@mini-erp/contracts';
 import request from 'supertest';
+import type TestAgent from 'supertest/lib/agent.js';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/app.setup.js';
@@ -21,7 +22,7 @@ export async function createTestApp() {
 
 /** Zera os dados de negócio e ressincroniza papéis e permissões. */
 export async function resetDatabase(prisma: PrismaService) {
-  await prisma.$executeRawUnsafe('TRUNCATE users, sessions, user_roles, products, categories, stock_movements, stock_balances, sales, sale_items, rate_limits CASCADE');
+  await prisma.$executeRawUnsafe('TRUNCATE users, sessions, user_roles, products, categories, stock_movements, stock_balances, sales, sale_items, sale_payments, cash_sessions, cash_movements, rate_limits CASCADE');
   await syncAccessCatalog(prisma);
 }
 
@@ -38,6 +39,14 @@ export async function createUser(prisma: PrismaService, email: string, roles: Ro
       roles: { create: roles.map((key) => ({ role: { connect: { key } } })) },
     },
   });
+}
+
+/** Cliente pagando com uma nota grande: cobre qualquer venda de teste (o troco sai do dinheiro). */
+export const PAYS_WITH_PLENTY = [{ method: 'CASH', amountCents: 10_000_000 }] as const;
+
+/** Toda venda exige caixa aberto (D44): os testes abrem o caixa de quem vai vender. */
+export async function openCash(agent: TestAgent, openingCents = 0) {
+  await agent.post('/api/cash/open').send({ openingCents }).expect(201);
 }
 
 /** Agente HTTP que guarda cookies entre requisições, como um navegador. */

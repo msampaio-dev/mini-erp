@@ -89,4 +89,5 @@ push. O `.github/workflows/backup.yml` faz o backup diário da produção, cript
 - [x] Publicado no Render + Neon, com rate limit de login validado em produção (ADR 0015)
 - [x] Testes de interface com Playwright no CI (ADR 0016)
 - [x] Backup diário da produção, criptografado e com teste de restauração (ADR 0017)
+- [x] Caixa com abertura, sangria, suprimento e fechamento cego; pagamento dividido (ADR 0018)
 - [ ] Migrar para o Prisma 8 quando sair a versão estável

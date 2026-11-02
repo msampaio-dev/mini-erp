@@ -4,7 +4,7 @@ import type { AbcRow, MarginRow, Product, ReorderRow, Sale, SalesReport, SellerR
 import type TestAgent from 'supertest/lib/agent.js';
 import type { App } from 'supertest/types.js';
 import type { PrismaService } from '../src/infra/prisma/prisma.service.js';
-import { createTestApp, createUser, loginAs, resetDatabase } from './support/test-app.js';
+import { createTestApp, createUser, loginAs, openCash, PAYS_WITH_PLENTY, resetDatabase } from './support/test-app.js';
 
 describe('Relatórios (e2e)', () => {
   let app: INestApplication<App>;
@@ -22,6 +22,7 @@ describe('Relatórios (e2e)', () => {
     await createUser(prisma, 'vendedor@teste.com', ['VENDEDOR']);
     gerente = await loginAs(app, 'gerente@teste.com');
     vendedor = await loginAs(app, 'vendedor@teste.com');
+    await openCash(vendedor);
   });
 
   afterAll(async () => {
@@ -37,7 +38,7 @@ describe('Relatórios (e2e)', () => {
   }
   async function sell(items: { productId: string; quantity: number }[], at?: string): Promise<Sale> {
     const sale = (
-      await vendedor.post('/api/sales').set('Idempotency-Key', randomUUID()).send({ items, payment: { method: 'PIX' } }).expect(201)
+      await vendedor.post('/api/sales').set('Idempotency-Key', randomUUID()).send({ items, payments: PAYS_WITH_PLENTY }).expect(201)
     ).body as Sale;
     // A tabela de vendas não é imutável (só o livro-razão é): dá para posicionar a venda no tempo.
     if (at) await prisma.$executeRawUnsafe(`UPDATE sales SET created_at = $1::timestamptz WHERE id = $2::uuid`, at, sale.id);

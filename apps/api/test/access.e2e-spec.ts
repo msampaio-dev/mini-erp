@@ -39,7 +39,7 @@ describe('Acesso (e2e)', () => {
       expect(res.body).toMatchObject({
         email: 'vendedor@teste.com',
         roles: ['VENDEDOR'],
-        permissions: ['estoque:ler', 'produtos:ler', 'vendas:criar', 'vendas:ler'],
+        permissions: ['caixa:operar', 'estoque:ler', 'produtos:ler', 'vendas:criar', 'vendas:ler'],
       });
     });
 

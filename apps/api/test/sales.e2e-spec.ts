@@ -4,7 +4,7 @@ import type { Balance, Product, Sale } from '@mini-erp/contracts';
 import type TestAgent from 'supertest/lib/agent.js';
 import type { App } from 'supertest/types.js';
 import type { PrismaService } from '../src/infra/prisma/prisma.service.js';
-import { createTestApp, createUser, loginAs, resetDatabase } from './support/test-app.js';
+import { createTestApp, createUser, loginAs, openCash, PAYS_WITH_PLENTY, resetDatabase } from './support/test-app.js';
 
 describe('Vendas (e2e)', () => {
   let app: INestApplication<App>;
@@ -25,6 +25,7 @@ describe('Vendas (e2e)', () => {
     await createUser(prisma, 'vendedor@teste.com', ['VENDEDOR']);
     gerente = await loginAs(app, 'gerente@teste.com');
     vendedor = await loginAs(app, 'vendedor@teste.com');
+    await openCash(vendedor);
 
     caneta = await product('CNT', 'Caneta', 'UN', 1000);
     lapis = await product('LAP', 'Lápis', 'UN', 500);
@@ -56,7 +57,9 @@ describe('Vendas (e2e)', () => {
     extra: Record<string, unknown> = {},
     key = randomUUID(),
     agent = vendedor,
-  ) => agent.post('/api/sales').set('Idempotency-Key', key).send({ items, payment: { method: 'PIX' }, ...extra });
+  ) => agent.post('/api/sales').set('Idempotency-Key', key).send({ items, payments: PAYS_WITH_PLENTY, ...extra });
+
+  const pay = (...payments: [string, number][]) => ({ payments: payments.map(([method, amountCents]) => ({ method, amountCents })) });
 
   async function qty(productId: string): Promise<number> {
     const res = await gerente.get('/api/inventory/balances').query({ productIds: productId }).expect(200);
@@ -210,18 +213,67 @@ describe('Vendas (e2e)', () => {
     });
   });
 
-  describe('pagamento (D28)', () => {
+  describe('pagamento dividido (D45)', () => {
     it('dinheiro calcula troco', async () => {
-      const res = await sell([{ productId: caneta.id, quantity: 2 }], { payment: { method: 'CASH', receivedCents: 5000 } }).expect(201);
+      const res = await sell([{ productId: caneta.id, quantity: 2 }], pay(['CASH', 5000])).expect(201);
 
       expect(res.body).toMatchObject({ totalCents: 2000, receivedCents: 5000, changeCents: 3000 });
+      expect(res.body.payments).toEqual([{ method: 'CASH', amountCents: 5000 }]);
     });
 
-    it('dinheiro insuficiente → 400; outros meios recebem exatamente o total', async () => {
-      await sell([{ productId: caneta.id, quantity: 2 }], { payment: { method: 'CASH', receivedCents: 1000 } }).expect(400);
+    it('divide entre Pix e dinheiro; o troco sai só do dinheiro', async () => {
+      // Total R$ 20: R$ 15 no Pix + nota de R$ 10 → troco de R$ 5.
+      const res = await sell([{ productId: caneta.id, quantity: 2 }], pay(['PIX', 1500], ['CASH', 1000])).expect(201);
 
-      const pix = await sell([{ productId: caneta.id, quantity: 2 }], { payment: { method: 'CREDIT', receivedCents: 9999 } }).expect(201);
-      expect(pix.body).toMatchObject({ receivedCents: 2000, changeCents: 0 });
+      expect(res.body).toMatchObject({ receivedCents: 2500, changeCents: 500 });
+      expect(res.body.payments).toEqual([
+        { method: 'CASH', amountCents: 1000 },
+        { method: 'PIX', amountCents: 1500 },
+      ]);
+    });
+
+    it('recusa: pago a menos, cartão acima do total (troco no cartão) e meio repetido', async () => {
+      const items = [{ productId: caneta.id, quantity: 2 }];
+      const short = await sell(items, pay(['CASH', 1000], ['PIX', 500])).expect(400);
+      expect(short.body.errors[0]).toMatchObject({ path: 'payments', message: 'Valor pago menor que o total' });
+
+      const over = await sell(items, pay(['CREDIT', 2500])).expect(400);
+      expect(over.body.errors[0].message).toMatch(/troco só em dinheiro/);
+      await sell(items, pay(['PIX', 1000], ['CASH', 2000], ['DEBIT', 0])).expect(201); // linha zerada é ignorada
+
+      await sell(items, pay(['PIX', 1000], ['PIX', 1000])).expect(400);
+      expect(await qty(caneta.id)).toBe(98);
+    });
+
+    it('o banco confere a soma dos pagamentos no COMMIT, mesmo sem a API (trigger adiado)', async () => {
+      const sale = (await sell([{ productId: caneta.id, quantity: 1 }], pay(['PIX', 1000])).expect(201)).body as Sale;
+
+      await expect(
+        prisma.$executeRawUnsafe(`UPDATE sale_payments SET amount_cents = 999 WHERE sale_id = '${sale.id}'`),
+      ).rejects.toThrow(/pagamentos somam 999 e o recebido é 1000/);
+    });
+  });
+
+  describe('caixa (D44)', () => {
+    it('sem caixa aberto não vende, e nada é gravado', async () => {
+      const res = await sell([{ productId: caneta.id, quantity: 1 }], {}, randomUUID(), gerente).expect(409);
+
+      expect(res.body.code).toBe('CASH_SESSION_REQUIRED');
+      expect(await prisma.sale.count()).toBe(0);
+      expect(await qty(caneta.id)).toBe(100);
+    });
+
+    it('a venda pertence ao caixa do operador e só o dinheiro líquido entra na gaveta', async () => {
+      const sale = (await sell([{ productId: caneta.id, quantity: 2 }], pay(['PIX', 500], ['CASH', 2000])).expect(201)).body as Sale;
+
+      const cash = (await gerente.get(`/api/cash/sessions/${sale.cashSessionId}`).expect(200)).body;
+      expect(cash.operator.name).toBe('vendedor');
+      // Nota de R$ 20 para pagar R$ 15 em dinheiro: entram R$ 15 (o troco de R$ 5 saiu da gaveta).
+      expect(cash.totals.expectedCents).toBe(1500);
+      expect(cash.totals.byMethod).toEqual([
+        { method: 'CASH', amountCents: 1500 },
+        { method: 'PIX', amountCents: 500 },
+      ]);
     });
   });
 
@@ -303,9 +355,9 @@ describe('Vendas (e2e)', () => {
     it('o banco recusa uma venda cuja conta não fecha (CHECK)', async () => {
       const sale = (await sell([{ productId: caneta.id, quantity: 1 }]).expect(201)).body as Sale;
 
-      // "Fraude" coerente com o troco (Pix: recebido = total), para isolar a regra subtotal - desconto = total.
+      // "Fraude" coerente com o troco (recebido - total = troco), para isolar a regra subtotal - desconto = total.
       await expect(
-        prisma.$executeRawUnsafe(`UPDATE sales SET total_cents = 1, received_cents = 1 WHERE id = '${sale.id}'`),
+        prisma.$executeRawUnsafe(`UPDATE sales SET total_cents = 1, received_cents = 1 + change_cents WHERE id = '${sale.id}'`),
       ).rejects.toThrow(/sales_total_matches/);
     });
   });

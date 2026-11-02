@@ -755,3 +755,42 @@ label.check input {
 .row-actions {
   justify-content: flex-end;
 }
+
+/* ─── Caixa (ADR 0018) ─── */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* Agrupa dt+dd num <div> sem quebrar o grid do <dl>. */
+.totals-row {
+  display: contents;
+}
+
+.payment-line {
+  display: grid;
+  grid-template-columns: 1fr 110px auto;
+  gap: 6px;
+  align-items: center;
+}
+
+fieldset.plain {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+fieldset.plain legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+/* Falta no fechamento: o vermelho vence a cor neutra do total. */
+.totals .grand.down {
+  color: var(--fail);
+}

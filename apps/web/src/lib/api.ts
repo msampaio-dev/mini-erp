@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+import { IDEMPOTENCY_HEADER } from '@mini-erp/contracts'
 
 /** Erro HTTP da API, com a mensagem e os erros por campo que o Nest devolve. */
 export class ApiError extends Error {
@@ -49,6 +50,22 @@ export async function apiSend<T extends z.ZodType>(
 
 export async function apiPost<T extends z.ZodType>(path: string, body: unknown, schema: T) {
   return apiSend('POST', path, body, schema)
+}
+
+/**
+ * POST com Idempotency-Key (ADR 0010). A chave nasce no componente e só é renovada depois do
+ * sucesso: reenviar após erro de rede reaproveita a chave e a operação não é lançada duas vezes.
+ */
+export async function apiPostIdempotent<T extends z.ZodType>(path: string, body: unknown, key: string, schema: T) {
+  const res = await fetch(`/api${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', [IDEMPOTENCY_HEADER]: key },
+    body: JSON.stringify(body),
+  })
+  const data: unknown = await res.json().catch(() => null)
+  if (!res.ok) throw new ApiError(res.status, data)
+  return schema.parse(data) as z.output<T>
 }
 
 export async function apiPostNoContent(path: string, body?: unknown): Promise<void> {

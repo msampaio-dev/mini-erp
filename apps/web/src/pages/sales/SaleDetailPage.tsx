@@ -45,7 +45,7 @@ function SaleDetail({ sale }: { sale: Sale }) {
         </div>
       </div>
       <p className="muted">
-        {dateTime.format(new Date(sale.createdAt))} · {sale.createdBy.name} · {PAYMENT_METHODS[sale.paymentMethod]}
+        {dateTime.format(new Date(sale.createdAt))} · {sale.createdBy.name}
       </p>
 
       {sale.status === 'CANCELED' && (
@@ -94,10 +94,14 @@ function SaleDetail({ sale }: { sale: Sale }) {
         <dd>− {formatCents(sale.discountCents)}</dd>
         <dt className="grand">Total</dt>
         <dd className="grand">{formatCents(sale.totalCents)}</dd>
-        {sale.paymentMethod === 'CASH' && (
+        {sale.payments.map((p) => (
+          <div key={p.method} className="totals-row">
+            <dt>{PAYMENT_METHODS[p.method]}</dt>
+            <dd>{formatCents(p.amountCents)}</dd>
+          </div>
+        ))}
+        {sale.changeCents > 0 && (
           <>
-            <dt>Recebido</dt>
-            <dd>{formatCents(sale.receivedCents)}</dd>
             <dt>Troco</dt>
             <dd>{formatCents(sale.changeCents)}</dd>
           </>

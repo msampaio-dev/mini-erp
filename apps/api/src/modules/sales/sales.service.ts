@@ -8,6 +8,7 @@ import {
 import {
   computeSaleTotals,
   isFractionalUnit,
+  settlePayments,
   type CancelSaleInput,
   type CreateSaleInput,
   type Page,
@@ -20,6 +21,7 @@ import {
 import { uniqueViolationTarget } from '../../common/prisma-errors.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
+import { CashService } from '../cash/cash.service.js';
 import { ProductsService } from '../catalog/products/products.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 
@@ -30,6 +32,7 @@ const userRef = { select: { id: true, name: true } } as const;
 
 const saleInclude = {
   items: { orderBy: { position: 'asc' } },
+  payments: { orderBy: { method: 'asc' } },
   createdBy: userRef,
   canceledBy: userRef,
 } satisfies Prisma.SaleInclude;
@@ -55,10 +58,11 @@ const toSale = (row: SaleRow): Sale => ({
   subtotalCents: row.subtotalCents,
   discountCents: row.discountCents,
   totalCents: row.totalCents,
-  paymentMethod: row.paymentMethod,
+  payments: row.payments.map((p) => ({ method: p.method, amountCents: p.amountCents })),
   receivedCents: row.receivedCents,
   changeCents: row.changeCents,
   note: row.note,
+  cashSessionId: row.cashSessionId,
   createdBy: row.createdBy,
   createdAt: row.createdAt.toISOString(),
   canceledAt: row.canceledAt?.toISOString() ?? null,
@@ -81,6 +85,7 @@ export class SalesService {
     private readonly prisma: PrismaService,
     private readonly products: ProductsService,
     private readonly inventory: InventoryService,
+    private readonly cash: CashService,
   ) {}
 
   async create(input: CreateSaleInput, userId: string, key: string): Promise<SaleResult> {
@@ -98,20 +103,24 @@ export class SalesService {
 
     try {
       const saleId = await this.prisma.$transaction(async (tx) => {
+        // Primeiro lock da venda: o caixa (D44). Toda venda tem dono e gaveta.
+        const cashSessionId = await this.cash.lockOpenSession(tx, userId);
         const sale = await tx.sale.create({
           data: {
             subtotalCents: totals.subtotalCents,
             discountCents: totals.discountCents,
             totalCents: totals.totalCents,
-            paymentMethod: input.payment.method,
             receivedCents: payment.receivedCents,
             changeCents: payment.changeCents,
             note: input.note,
             createdById: userId,
             idempotencyKey: key,
+            cashSessionId,
+            payments: { create: input.payments.filter((p) => p.amountCents > 0) },
           },
           select: { id: true, number: true },
         });
+        await this.cash.recordSaleCash(tx, { sessionId: cashSessionId, saleId: sale.id, amountCents: payment.cashNetCents, userId });
 
         // ORDEM FIXA DE LOCKS (D23): baixa sempre em ordem de productId. Sem isso, a venda
         // [A, B] e a venda [B, A] simultâneas podem travar uma esperando a outra (deadlock):
@@ -179,7 +188,10 @@ export class SalesService {
         throw new ConflictException({ code: 'ALREADY_CANCELED', message: 'Esta venda já foi cancelada' });
       }
 
-      const sale = await tx.sale.findUniqueOrThrow({ where: { id }, select: { number: true } });
+      const sale = await tx.sale.findUniqueOrThrow({
+        where: { id },
+        select: { number: true, cashSessionId: true, changeCents: true, payments: { where: { method: 'CASH' } } },
+      });
       // Mesma ordem de locks da criação.
       const items = await tx.saleItem.findMany({ where: { saleId: id }, orderBy: { productId: 'asc' } });
       for (const item of items) {
@@ -191,6 +203,15 @@ export class SalesService {
           note: `Cancelamento da venda nº ${sale.number}: ${input.reason}`,
         });
       }
+      // O dinheiro que tinha ficado na gaveta volta para o cliente (D47).
+      await this.cash.recordCashOut(tx, {
+        type: 'SALE_CANCEL',
+        saleSessionId: sale.cashSessionId,
+        saleId: id,
+        amountCents: (sale.payments[0]?.amountCents ?? 0) - sale.changeCents,
+        userId,
+        note: `Cancelamento da venda nº ${sale.number}`,
+      });
     });
     return this.get(id);
   }
@@ -210,7 +231,7 @@ export class SalesService {
       this.prisma.sale.count({ where }),
       this.prisma.sale.findMany({
         where,
-        include: { createdBy: userRef, _count: { select: { items: true } } },
+        include: { createdBy: userRef, payments: { orderBy: { method: 'asc' } }, _count: { select: { items: true } } },
         orderBy: [{ createdAt: 'desc' }, { number: 'desc' }],
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
@@ -224,7 +245,7 @@ export class SalesService {
         subtotalCents: r.subtotalCents,
         discountCents: r.discountCents,
         totalCents: r.totalCents,
-        paymentMethod: r.paymentMethod,
+        payments: r.payments.map((p) => ({ method: p.method, amountCents: p.amountCents })),
         receivedCents: r.receivedCents,
         changeCents: r.changeCents,
         createdBy: r.createdBy,
@@ -275,12 +296,14 @@ export class SalesService {
     return totals;
   }
 
-  /** Só dinheiro tem troco; nos demais meios o recebido é exatamente o total (D28). */
+  /** Pagamento dividido (D45): a regra é a mesma função que o PDV usa para a prévia. */
   private settlePayment(input: CreateSaleInput, totalCents: number) {
-    if (input.payment.method !== 'CASH') return { receivedCents: totalCents, changeCents: 0 };
-    const receivedCents = input.payment.receivedCents ?? totalCents;
-    if (receivedCents < totalCents) invalid('payment.receivedCents', 'Valor recebido menor que o total');
-    return { receivedCents, changeCents: receivedCents - totalCents };
+    try {
+      return settlePayments(totalCents, input.payments);
+    } catch (err) {
+      if (err instanceof RangeError) invalid('payments', err.message);
+      throw err;
+    }
   }
 
   private findByKey(userId: string, key: string) {
@@ -297,8 +320,14 @@ export class SalesService {
         .map((i) => `${i.productId}:${i.quantity}`)
         .sort()
         .join('|');
+    const asPayKey = (list: { method: string; amountCents: number }[]) =>
+      list
+        .filter((p) => p.amountCents > 0)
+        .map((p) => `${p.method}:${p.amountCents}`)
+        .sort()
+        .join('|');
     const same =
-      row.paymentMethod === input.payment.method &&
+      asPayKey(row.payments) === asPayKey(input.payments) &&
       asKey(row.items.map((i) => ({ productId: i.productId, quantity: i.quantity.toNumber() }))) === asKey(input.items);
     if (!same) {
       throw new UnprocessableEntityException({

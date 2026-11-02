@@ -26,7 +26,8 @@ test.describe('Login e sessão', () => {
     await login(page);
 
     await expect(page).toHaveURL(/\/vendas\/nova$/);
-    await expect(page.getByRole('heading', { name: 'Nova venda' })).toBeVisible();
+    // "Nova venda" ou "Caixa fechado": depende de o admin já ter aberto o caixa em outro teste.
+    await expect(page.getByRole('heading', { name: /Nova venda|Caixa fechado/ })).toBeVisible();
   });
 
   test('a sessão sobrevive ao recarregar e termina ao sair', async ({ page }) => {

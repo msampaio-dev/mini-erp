@@ -8,6 +8,7 @@ import {
   type SaleStatus,
 } from '@mini-erp/contracts'
 import { apiGet, apiPost, ApiError, toQueryString } from './api.ts'
+import { cashKeys } from './cash-queries.ts'
 import { inventoryKeys } from './inventory-queries.ts'
 
 export interface SaleListParams {
@@ -34,13 +35,14 @@ export function useSale(id: string) {
   return useQuery({ queryKey: saleKeys.detail(id), queryFn: () => apiGet(`/sales/${id}`, saleSchema) })
 }
 
-/** Venda e cancelamento mexem no estoque: invalida vendas E estoque. */
+/** Venda e cancelamento mexem no estoque e no caixa: invalida os três. */
 function useInvalidateAfterSale() {
   const qc = useQueryClient()
   return () =>
     Promise.all([
       qc.invalidateQueries({ queryKey: saleKeys.all }),
       qc.invalidateQueries({ queryKey: inventoryKeys.all }),
+      qc.invalidateQueries({ queryKey: cashKeys.all }),
     ])
 }
 

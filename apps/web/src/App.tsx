@@ -4,6 +4,8 @@ import { Layout } from './components/Layout.tsx'
 import { RequirePermission } from './components/RequirePermission.tsx'
 import { LoginPage } from './pages/LoginPage.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
+import { CashDetailPage, CashHistoryPage } from './pages/cash/CashHistoryPage.tsx'
+import { CashPage } from './pages/cash/CashPage.tsx'
 import { ProfilePage } from './pages/ProfilePage.tsx'
 import { ReportsPage } from './pages/reports/ReportsPage.tsx'
 import { CategoriesPage } from './pages/products/CategoriesPage.tsx'
@@ -87,6 +89,30 @@ export default function App() {
           element={
             <RequirePermission permission="vendas:ler">
               <SaleDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="caixa"
+          element={
+            <RequirePermission permission="caixa:operar">
+              <CashPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="caixa/historico"
+          element={
+            <RequirePermission permission="caixa:gerenciar">
+              <CashHistoryPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="caixa/:id"
+          element={
+            <RequirePermission permission="caixa:operar">
+              <CashDetailPage />
             </RequirePermission>
           }
         />
